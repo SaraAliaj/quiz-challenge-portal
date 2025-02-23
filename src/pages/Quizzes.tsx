@@ -2,8 +2,10 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Calendar, Clock } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 const upcomingQuiz = {
+  id: "week-1-neural-networks",
   title: "Week 1: Neural Networks Fundamentals",
   date: "Friday, March 15, 2024",
   time: "14:00",
@@ -11,6 +13,12 @@ const upcomingQuiz = {
 };
 
 export default function Quizzes() {
+  const navigate = useNavigate();
+
+  const handleStartQuiz = () => {
+    navigate(`/quiz/${upcomingQuiz.id}`);
+  };
+
   return (
     <div className="p-6">
       <h1 className="text-2xl font-bold mb-6">Weekly Quizzes</h1>
@@ -33,7 +41,7 @@ export default function Quizzes() {
             </div>
             <p className="text-sm text-gray-500">Duration: {upcomingQuiz.duration}</p>
           </div>
-          <Button className="w-full">Start Quiz</Button>
+          <Button className="w-full" onClick={handleStartQuiz}>Start Quiz</Button>
         </CardContent>
       </Card>
     </div>

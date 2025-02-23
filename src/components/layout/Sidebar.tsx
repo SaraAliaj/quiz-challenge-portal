@@ -7,6 +7,7 @@ import {
   Layout,
   MessageCircle,
   Trophy,
+  Award,
 } from "lucide-react";
 
 export default function Sidebar() {
@@ -19,16 +20,16 @@ export default function Sidebar() {
         </Link>
       </div>
       <nav className="flex-1 p-4 space-y-2">
-        <Link to="/">
-          <Button variant="ghost" className="w-full justify-start">
-            <Layout className="mr-2 h-4 w-4" />
-            Dashboard
-          </Button>
-        </Link>
         <Link to="/lessons">
           <Button variant="ghost" className="w-full justify-start">
             <Book className="mr-2 h-4 w-4" />
             Lessons
+          </Button>
+        </Link>
+        <Link to="/challenges">
+          <Button variant="ghost" className="w-full justify-start">
+            <Award className="mr-2 h-4 w-4" />
+            Challenges
           </Button>
         </Link>
         <Link to="/quizzes">
