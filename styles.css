@@ -1,0 +1,14 @@
+.dropdown {
+    position: relative;
+    display: inline-block;
+    margin: 0 10px; /* Adds even spacing between dropdowns */
+}
+
+.dropdown-content {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    min-width: 200px; /* Consistent width for all dropdowns */
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    z-index: 1;
+} 

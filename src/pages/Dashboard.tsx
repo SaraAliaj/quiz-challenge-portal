@@ -1,8 +1,11 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Trophy } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { Link } from "react-router-dom";
 
 export default function Dashboard() {
+  const { user } = useAuth();
+
   const challenges = [
     {
       lessonTitle: "Neural Networks Basics",
@@ -25,8 +28,25 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold mb-6">Welcome to AI School</h1>
+    <div className="space-y-6">
+      <h1 className="text-3xl font-bold">Welcome, {user?.username}!</h1>
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <DashboardCard
+          title="Continue Learning"
+          description="Pick up where you left off"
+          link="/lessons"
+        />
+        <DashboardCard
+          title="Take a Challenge"
+          description="Test your skills"
+          link="/challenges"
+        />
+        <DashboardCard
+          title="Practice Quizzes"
+          description="Reinforce your knowledge"
+          link="/quizzes"
+        />
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <Card>
           <CardHeader>
@@ -68,5 +88,16 @@ export default function Dashboard() {
         </Card>
       </div>
     </div>
+  );
+}
+
+function DashboardCard({ title, description, link }) {
+  return (
+    <Link to={link}>
+      <div className="p-6 rounded-lg border bg-card hover:bg-accent/10 transition-colors">
+        <h2 className="text-xl font-semibold">{title}</h2>
+        <p className="text-muted-foreground mt-2">{description}</p>
+      </div>
+    </Link>
   );
 }

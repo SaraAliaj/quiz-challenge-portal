@@ -1,9 +1,9 @@
-
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function RegisterForm() {
   const [formData, setFormData] = useState({
@@ -13,11 +13,59 @@ export default function RegisterForm() {
     password: "",
     confirmPassword: "",
   });
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const { register } = useAuth();
+  const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Implement registration logic here
-    console.log("Registration attempt with:", formData);
+    setError("");
+    setIsLoading(true);
+
+    try {
+      // Basic validation
+      if (!formData.username.trim() || !formData.email.trim() || !formData.password.trim()) {
+        setError("Please fill in all required fields");
+        return;
+      }
+
+      if (formData.password !== formData.confirmPassword) {
+        setError("Passwords do not match");
+        return;
+      }
+
+      if (formData.password.length < 6) {
+        setError("Password must be at least 6 characters long");
+        return;
+      }
+
+      // Email format validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(formData.email)) {
+        setError("Please enter a valid email address");
+        return;
+      }
+
+      const { confirmPassword, ...registerData } = formData;
+      
+      console.log('Attempting registration with:', {
+        ...registerData,
+        password: '[HIDDEN]'
+      });
+
+      await register(registerData);
+      navigate('/dashboard');
+    } catch (err: any) {
+      console.error('Registration error:', err);
+      const errorMessage = err.response?.data?.message || 
+                          err.response?.data?.details ||
+                          err.message || 
+                          "Registration failed. Please try again.";
+      setError(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -31,6 +79,11 @@ export default function RegisterForm() {
           <CardTitle className="text-2xl text-center">Create an Account</CardTitle>
         </CardHeader>
         <CardContent>
+          {error && (
+            <div className="mb-4 p-2 text-red-500 bg-red-50 rounded text-sm">
+              {error}
+            </div>
+          )}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -82,8 +135,12 @@ export default function RegisterForm() {
                 required
               />
             </div>
-            <Button type="submit" className="w-full">
-              Sign Up
+            <Button 
+              type="submit" 
+              className="w-full"
+              disabled={isLoading}
+            >
+              {isLoading ? "Signing up..." : "Sign Up"}
             </Button>
           </form>
           <div className="mt-4 text-center text-sm">

@@ -1,18 +1,30 @@
-
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const { login } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Implement login logic here
-    console.log("Login attempt with:", { email, password });
+    setError("");
+    
+    try {
+      await login(email, password);
+      // Get the redirect path from location state or default to dashboard
+      const from = (location.state as any)?.from?.pathname || "/dashboard";
+      navigate(from, { replace: true });
+    } catch (err) {
+      setError("Failed to login. Please check your credentials.");
+    }
   };
 
   return (
@@ -22,6 +34,11 @@ export default function LoginForm() {
           <CardTitle className="text-2xl text-center">Login to AI School</CardTitle>
         </CardHeader>
         <CardContent>
+          {error && (
+            <div className="mb-4 p-2 text-red-500 bg-red-50 rounded text-sm">
+              {error}
+            </div>
+          )}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Input

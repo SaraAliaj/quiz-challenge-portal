@@ -1,52 +1,104 @@
-
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { useParams } from "react-router-dom";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { ChevronRight } from "lucide-react";
+
+interface Question {
+  id: string;
+  question: string;
+  points: number;
+}
 
 export default function QuizContent() {
-  const { id } = useParams();
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [timeLeft, setTimeLeft] = useState<number>(2700); // 45:00 minutes
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [isQuizOpen, setIsQuizOpen] = useState(true);
+
+  const questions: Question[] = [
+    {
+      id: "q1",
+      question: "Explain the difference between INNER JOIN and LEFT JOIN with examples.",
+      points: 25
+    }
+  ];
+
+  const currentQuestion = questions[currentQuestionIndex];
+
+  const handleAnswerChange = (questionId: string, answer: string) => {
+    setAnswers(prev => ({
+      ...prev,
+      [questionId]: answer
+    }));
+  };
+
+  const handleSubmitQuestion = async () => {
+    if (!answers[currentQuestion.id]?.trim()) return;
+
+    setIsSubmitting(true);
+    try {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      console.log('Submitted answer for question:', currentQuestion.id);
+    } catch (error) {
+      console.error('Failed to submit answer:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
-    <div className="flex h-screen">
-      {/* Sidebar */}
-      <div className="w-64 border-r bg-gray-50 p-4">
-        <h2 className="font-semibold mb-4">Curriculum: {id}</h2>
-        <div className="space-y-2">
-          <button className="w-full text-left p-2 hover:bg-gray-100 rounded">
-            Introduction
-          </button>
-          <button className="w-full text-left p-2 hover:bg-gray-100 rounded">
-            Basic Concepts
-          </button>
-          <button className="w-full text-left p-2 hover:bg-gray-100 rounded">
-            Advanced Topics
-          </button>
+    <Dialog open={isQuizOpen} onOpenChange={setIsQuizOpen}>
+      <DialogContent className="sm:max-w-[600px] p-6">
+        <div className="flex justify-between items-center mb-4">
+          <div className="flex items-center gap-6">
+            <h2 className="text-base font-semibold">
+              SQL Joins and Queries
+            </h2>
+            <span className="text-sm text-muted-foreground">
+              Time Left: 45:00
+            </span>
+          </div>
+          <span className="text-sm">
+            Question 1 of 1
+          </span>
         </div>
-      </div>
 
-      {/* Main Content */}
-      <div className="flex-1 p-6">
-        <Card>
-          <CardContent className="p-6">
-            <div className="space-y-4">
-              <h1 className="text-2xl font-bold">Quiz Overview</h1>
-              <p className="text-gray-600">
-                This quiz will test your understanding of the key concepts covered
-                in this module. Take your time to answer each question carefully.
-              </p>
-              <div className="space-y-2">
-                <p className="font-medium">Guidelines:</p>
-                <ul className="list-disc list-inside text-gray-600">
-                  <li>You have 60 minutes to complete this quiz</li>
-                  <li>Each question is worth equal points</li>
-                  <li>You can review your answers before submission</li>
-                </ul>
-              </div>
-              <Button className="mt-4">Begin Quiz</Button>
+        <div className="space-y-4">
+          <div className="flex justify-between items-start">
+            <div className="text-[10px] text-red-500">*</div>
+            <div className="text-sm text-muted-foreground">
+              25 points
             </div>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
+          </div>
+          
+          <div className="space-y-2">
+            <p className="text-sm">Question 1:</p>
+            <p className="text-sm">{currentQuestion.question}</p>
+          </div>
+          
+          <div className="relative">
+            <div className="text-[10px] text-red-500 absolute -top-2 right-0">*</div>
+            <Textarea
+              placeholder="Write your answer here..."
+              value={answers[currentQuestion.id] || ''}
+              onChange={(e) => handleAnswerChange(currentQuestion.id, e.target.value)}
+              className="min-h-[200px] resize-none text-sm"
+            />
+          </div>
+        </div>
+
+        <div className="flex justify-end items-center gap-2 mt-6">
+          <Button
+            onClick={handleSubmitQuestion}
+            disabled={isSubmitting || !answers[currentQuestion.id]?.trim()}
+            size="sm"
+          >
+            Submit
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
