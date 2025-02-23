@@ -19,7 +19,7 @@ export default function Sidebar() {
         </Link>
       </div>
       <nav className="flex-1 p-4 space-y-2">
-        <Link to="/dashboard">
+        <Link to="/">
           <Button variant="ghost" className="w-full justify-start">
             <Layout className="mr-2 h-4 w-4" />
             Dashboard
