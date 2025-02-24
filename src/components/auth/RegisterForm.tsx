@@ -55,7 +55,7 @@ export default function RegisterForm() {
       });
 
       await register(registerData);
-      navigate('/dashboard');
+      navigate('/chat');
     } catch (err: any) {
       console.error('Registration error:', err);
       const errorMessage = err.response?.data?.message || 

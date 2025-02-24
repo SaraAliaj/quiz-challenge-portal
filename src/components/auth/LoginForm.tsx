@@ -19,8 +19,8 @@ export default function LoginForm() {
     
     try {
       await login(email, password);
-      // Get the redirect path from location state or default to dashboard
-      const from = (location.state as any)?.from?.pathname || "/dashboard";
+      // Change default redirect to /chat
+      const from = (location.state as any)?.from?.pathname || "/chat";
       navigate(from, { replace: true });
     } catch (err) {
       setError("Failed to login. Please check your credentials.");
