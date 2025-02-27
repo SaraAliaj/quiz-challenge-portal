@@ -11,6 +11,18 @@ const axiosInstance = axios.create({
   withCredentials: true
 });
 
+// Add request interceptor to include auth token
+axiosInstance.interceptors.request.use(
+  config => {
+    const token = localStorage.getItem('authToken');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  error => Promise.reject(error)
+);
+
 // Add response interceptor for error handling
 axiosInstance.interceptors.response.use(
   response => response,
@@ -59,6 +71,16 @@ const api = {
         data: error.response?.data,
         message: error.message
       });
+      throw error;
+    }
+  },
+
+  verifyToken: async () => {
+    try {
+      const response = await axiosInstance.get('/auth/verify');
+      return response.data;
+    } catch (error) {
+      console.error('Token verification failed:', error);
       throw error;
     }
   },

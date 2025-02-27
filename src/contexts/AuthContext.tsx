@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { api } from '@/server/api';
+import { FullPageLoading } from '@/components/ui/loading';
 
 interface User {
   id: number;
@@ -19,6 +20,8 @@ interface AuthContextType {
     email: string;
     password: string;
   }) => Promise<void>;
+  checkAuthStatus: () => Promise<boolean>;
+  isLoading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -26,14 +29,64 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const checkAuthStatus = async (): Promise<boolean> => {
+    const token = localStorage.getItem('authToken');
+    if (!token) return false;
+    
+    try {
+      // Verify token validity with the server
+      const response = await api.verifyToken();
+      if (response.valid) {
+        const userData = localStorage.getItem('user');
+        if (userData) {
+          setUser(JSON.parse(userData));
+          setIsAuthenticated(true);
+          return true;
+        }
+      } else {
+        // If token is invalid, clear local storage
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('user');
+        setIsAuthenticated(false);
+        setUser(null);
+      }
+    } catch (error) {
+      console.error('Token verification failed:', error);
+      // Don't clear token on network errors to allow offline access
+      // Instead, trust the cached token
+      const userData = localStorage.getItem('user');
+      if (userData) {
+        setUser(JSON.parse(userData));
+        setIsAuthenticated(true);
+        return true;
+      }
+    }
+    return false;
+  };
 
   useEffect(() => {
-    const token = localStorage.getItem('authToken');
-    const userData = localStorage.getItem('user');
-    if (token && userData) {
-      setIsAuthenticated(true);
-      setUser(JSON.parse(userData));
-    }
+    const initAuth = async () => {
+      setIsLoading(true);
+      const token = localStorage.getItem('authToken');
+      const userData = localStorage.getItem('user');
+      
+      if (token && userData) {
+        try {
+          // Try to verify token, but if server is unreachable, still use cached data
+          await checkAuthStatus();
+        } catch (error) {
+          console.error('Auth initialization error:', error);
+          // If server is unreachable, still use cached credentials
+          setIsAuthenticated(true);
+          setUser(JSON.parse(userData));
+        }
+      }
+      setIsLoading(false);
+    };
+    
+    initAuth();
   }, []);
 
   const login = async (email: string, password: string) => {
@@ -75,8 +128,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, user, login, logout, register }}>
-      {children}
+    <AuthContext.Provider value={{ 
+      isAuthenticated, 
+      user, 
+      login, 
+      logout, 
+      register, 
+      checkAuthStatus,
+      isLoading 
+    }}>
+      {isLoading ? <FullPageLoading text="Loading your session..." /> : children}
     </AuthContext.Provider>
   );
 }

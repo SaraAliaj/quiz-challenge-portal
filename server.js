@@ -4,6 +4,9 @@ import mysql from 'mysql2';
 import cors from 'cors';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 
 const app = express();
 
@@ -190,6 +193,154 @@ app.post('/api/auth/register', async (req, res) => {
         details: error.message 
       });
     }
+  }
+});
+
+// Middleware to verify JWT token
+const verifyToken = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ message: 'No token provided' });
+  }
+  
+  const token = authHeader.split(' ')[1];
+  
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch (error) {
+    return res.status(401).json({ message: 'Invalid token' });
+  }
+};
+
+// Token verification endpoint
+app.get('/api/auth/verify', verifyToken, (req, res) => {
+  res.json({ valid: true, user: req.user });
+});
+
+// Middleware for handling file uploads
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const uploadDir = path.join(process.cwd(), 'uploads');
+    // Create directory if it doesn't exist
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
+    // Create unique filename with original extension
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    cb(null, file.fieldname + '-' + uniqueSuffix + ext);
+  }
+});
+
+const upload = multer({ 
+  storage: storage,
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
+  fileFilter: function (req, file, cb) {
+    // Accept only PDF and text files
+    if (file.mimetype === 'application/pdf' || file.mimetype === 'text/plain') {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PDF and text files are allowed'));
+    }
+  }
+});
+
+// API endpoints for course management
+// Get all courses
+app.get('/api/courses', async (req, res) => {
+  try {
+    const [rows] = await db.promise().query('SELECT id, name FROM courses ORDER BY name');
+    res.json(rows);
+  } catch (error) {
+    console.error('Error fetching courses:', error);
+    res.status(500).json({ message: 'Failed to fetch courses' });
+  }
+});
+
+// Get weeks for a specific course
+app.get('/api/courses/:courseId/weeks', async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const [rows] = await db.promise().query(
+      'SELECT id, week_number, title FROM weeks WHERE course_id = ? ORDER BY week_number',
+      [courseId]
+    );
+    res.json(rows);
+  } catch (error) {
+    console.error('Error fetching weeks:', error);
+    res.status(500).json({ message: 'Failed to fetch weeks' });
+  }
+});
+
+// Get days for a specific week
+app.get('/api/weeks/:weekId/days', async (req, res) => {
+  try {
+    const { weekId } = req.params;
+    const [rows] = await db.promise().query(
+      'SELECT id, day_number, title FROM days WHERE week_id = ? ORDER BY day_number',
+      [weekId]
+    );
+    res.json(rows);
+  } catch (error) {
+    console.error('Error fetching days:', error);
+    res.status(500).json({ message: 'Failed to fetch days' });
+  }
+});
+
+// Upload lesson with materials
+app.post('/api/lessons', verifyToken, upload.array('files', 10), async (req, res) => {
+  const { courseId, weekId, dayId, title } = req.body;
+  const files = req.files;
+
+  // Validate input
+  if (!courseId || !weekId || !dayId || !title || !files || files.length === 0) {
+    return res.status(400).json({ message: 'Missing required fields' });
+  }
+
+  let connection;
+  try {
+    connection = await db.promise().getConnection();
+    await connection.beginTransaction();
+
+    // Insert lesson
+    const [lessonResult] = await connection.query(
+      'INSERT INTO lessons (day_id, title) VALUES (?, ?)',
+      [dayId, title]
+    );
+    const lessonId = lessonResult.insertId;
+
+    // Insert materials
+    for (const file of files) {
+      await connection.query(
+        'INSERT INTO materials (lesson_id, file_name, file_path, file_type, file_size) VALUES (?, ?, ?, ?, ?)',
+        [
+          lessonId,
+          file.originalname,
+          file.path,
+          file.mimetype,
+          file.size
+        ]
+      );
+    }
+
+    await connection.commit();
+    res.status(201).json({ 
+      message: 'Lesson uploaded successfully',
+      lessonId,
+      fileCount: files.length
+    });
+  } catch (error) {
+    if (connection) await connection.rollback();
+    console.error('Error uploading lesson:', error);
+    res.status(500).json({ message: 'Failed to upload lesson' });
+  } finally {
+    if (connection) connection.release();
   }
 });
 

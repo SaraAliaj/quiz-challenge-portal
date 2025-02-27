@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,13 +9,39 @@ export default function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const { login } = useAuth();
+  const [isLoading, setIsLoading] = useState(false);
+  const { login, isAuthenticated, checkAuthStatus } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    const checkAuth = async () => {
+      if (isAuthenticated) {
+        const from = (location.state as any)?.from?.pathname || "/chat";
+        navigate(from, { replace: true });
+        return;
+      }
+      
+      // Check if we have a valid session
+      try {
+        const isValid = await checkAuthStatus();
+        if (isValid) {
+          const from = (location.state as any)?.from?.pathname || "/chat";
+          navigate(from, { replace: true });
+        }
+      } catch (error) {
+        console.error("Auth check error:", error);
+      }
+    };
+    
+    checkAuth();
+  }, [isAuthenticated, navigate, location, checkAuthStatus]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setIsLoading(true);
     
     try {
       await login(email, password);
@@ -24,6 +50,8 @@ export default function LoginForm() {
       navigate(from, { replace: true });
     } catch (err) {
       setError("Failed to login. Please check your credentials.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -47,6 +75,7 @@ export default function LoginForm() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                disabled={isLoading}
               />
             </div>
             <div className="space-y-2">
@@ -56,10 +85,11 @@ export default function LoginForm() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                disabled={isLoading}
               />
             </div>
-            <Button type="submit" className="w-full">
-              Login
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading ? "Logging in..." : "Login"}
             </Button>
           </form>
           <div className="mt-4 text-center text-sm">

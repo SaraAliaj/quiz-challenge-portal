@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,8 +15,31 @@ export default function RegisterForm() {
   });
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const { register } = useAuth();
+  const { register, isAuthenticated, checkAuthStatus } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    const checkAuth = async () => {
+      if (isAuthenticated) {
+        navigate('/chat', { replace: true });
+        return;
+      }
+      
+      // Check if we have a valid session
+      try {
+        const isValid = await checkAuthStatus();
+        if (isValid) {
+          navigate('/chat', { replace: true });
+        }
+      } catch (error) {
+        console.error("Auth check error:", error);
+      }
+    };
+    
+    checkAuth();
+  }, [isAuthenticated, navigate, checkAuthStatus]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,16 +50,19 @@ export default function RegisterForm() {
       // Basic validation
       if (!formData.username.trim() || !formData.email.trim() || !formData.password.trim()) {
         setError("Please fill in all required fields");
+        setIsLoading(false);
         return;
       }
 
       if (formData.password !== formData.confirmPassword) {
         setError("Passwords do not match");
+        setIsLoading(false);
         return;
       }
 
       if (formData.password.length < 6) {
         setError("Password must be at least 6 characters long");
+        setIsLoading(false);
         return;
       }
 
@@ -44,6 +70,7 @@ export default function RegisterForm() {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(formData.email)) {
         setError("Please enter a valid email address");
+        setIsLoading(false);
         return;
       }
 
@@ -93,6 +120,7 @@ export default function RegisterForm() {
                   value={formData.username}
                   onChange={handleChange}
                   required
+                  disabled={isLoading}
                 />
               </div>
               <div className="space-y-2">
@@ -102,6 +130,7 @@ export default function RegisterForm() {
                   value={formData.surname}
                   onChange={handleChange}
                   required
+                  disabled={isLoading}
                 />
               </div>
             </div>
@@ -113,6 +142,7 @@ export default function RegisterForm() {
                 value={formData.email}
                 onChange={handleChange}
                 required
+                disabled={isLoading}
               />
             </div>
             <div className="space-y-2">
@@ -123,6 +153,7 @@ export default function RegisterForm() {
                 value={formData.password}
                 onChange={handleChange}
                 required
+                disabled={isLoading}
               />
             </div>
             <div className="space-y-2">
@@ -133,6 +164,7 @@ export default function RegisterForm() {
                 value={formData.confirmPassword}
                 onChange={handleChange}
                 required
+                disabled={isLoading}
               />
             </div>
             <Button 
