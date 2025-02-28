@@ -21,6 +21,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import LessonChatbot from "@/components/LessonChatbot";
 
 export default function Layout() {
   const navigate = useNavigate();
@@ -29,6 +30,7 @@ export default function Layout() {
   const [openWeeks, setOpenWeeks] = useState<string[]>([]);
   const [completedLessons, setCompletedLessons] = useState<string[]>([]);
   const [isCurriculumOpen, setIsCurriculumOpen] = useState(false);
+  const [activeLesson, setActiveLesson] = useState<string | null>(null);
 
   const courses = [
     {
@@ -96,6 +98,13 @@ export default function Layout() {
   const handleSignOut = () => {
     logout();
     navigate('/login');
+  };
+
+  const handleLessonClick = (lessonName: string) => {
+    // Reset scroll position to top
+    window.scrollTo(0, 0);
+    
+    setActiveLesson(lessonName);
   };
 
   return (
@@ -169,8 +178,11 @@ export default function Layout() {
                                     {week.lessons.map(lesson => (
                                       <div
                                         key={lesson.id}
-                                        className="flex items-center justify-between px-3 py-2 text-sm text-gray-600 hover:bg-gray-200 rounded-lg cursor-pointer"
-                                        onClick={() => toggleLessonComplete(lesson.id)}
+                                        className={cn(
+                                          "flex items-center justify-between px-3 py-2 text-sm text-gray-600 hover:bg-gray-200 rounded-lg cursor-pointer",
+                                          activeLesson === lesson.name && "bg-gray-200 font-semibold"
+                                        )}
+                                        onClick={() => handleLessonClick(lesson.name)}
                                       >
                                         <span className={cn(
                                           "font-medium",
@@ -226,9 +238,17 @@ export default function Layout() {
         </div>
 
         {/* Main Content */}
-        <div className="flex-1 min-h-screen">
-          <div className="container mx-auto p-6">
-        <Outlet />
+        <div className="flex-1 min-h-screen bg-gray-50">
+          <div className="h-full flex flex-col">
+            {activeLesson ? (
+              <div className="flex-1 h-screen overflow-hidden">
+                <LessonChatbot lessonTitle={activeLesson} />
+              </div>
+            ) : (
+              <div className="container mx-auto p-6">
+                <Outlet />
+              </div>
+            )}
           </div>
         </div>
       </div>
