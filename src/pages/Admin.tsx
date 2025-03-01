@@ -1,42 +1,24 @@
-import { useState, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { useToast } from "@/components/ui/use-toast";
 import { Input } from "@/components/ui/input";
-import { Upload, FileText, Plus, Trash2 } from "lucide-react";
+import { Upload, Plus } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { api } from "@/server/api"; // Adjust this import to match where your API functions are located
 
 interface FileWithPreview extends File {
   id: string;
   name: string;
 }
-
-// Sample data for dropdowns
-const courses = [
-  { id: 1, name: "React Development" },
-  { id: 2, name: "SQL Mastery" },
-  { id: 3, name: "Python Fundamentals" },
-];
-
-// Generate weeks 1-12
-const weeks = Array.from({ length: 12 }, (_, i) => ({ 
-  id: i + 1, 
-  name: `Week ${i + 1}` 
-}));
-
-// Generate days 1-7
-const days = Array.from({ length: 7 }, (_, i) => ({ 
-  id: i + 1, 
-  name: `Day ${i + 1}` 
-}));
 
 export default function Admin() {
   const [files, setFiles] = useState<FileWithPreview[]>([]);
@@ -45,28 +27,92 @@ export default function Admin() {
   const [selectedWeek, setSelectedWeek] = useState<string>("");
   const [selectedDay, setSelectedDay] = useState<string>("");
   const [lessonTitle, setLessonTitle] = useState<string>("");
+  const [courses, setCourses] = useState<any[]>([]);
+  const [weeks, setWeeks] = useState<any[]>([]);
+  const [days, setDays] = useState<any[]>([]);
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    const fetchCourses = async () => {
+      try {
+        const coursesData = await api.getCourses(); // API call to get courses
+        setCourses(coursesData);
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "Failed to fetch courses",
+          variant: "destructive",
+        });
+      }
+    };
+    fetchCourses();
+  }, []);
+
+  useEffect(() => {
+    const fetchWeeks = async () => {
+      try {
+        const weeksData = await api.getWeeks(); // API call to get weeks
+        setWeeks(weeksData);
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "Failed to fetch weeks",
+          variant: "destructive",
+        });
+      }
+    };
+    fetchWeeks();
+  }, []);
+
+  useEffect(() => {
+    const fetchDays = async () => {
+      try {
+        const daysData = await api.getDays(); // API call to get days
+        setDays(daysData);
+      } catch (error) {
+        toast({
+          title: "Error",
+          description: "Failed to fetch days",
+          variant: "destructive",
+        });
+      }
+    };
+    fetchDays();
+  }, []);
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFiles = Array.from(e.target.files || []);
+    if (!e.target.files || e.target.files.length === 0) {
+      console.log('No files selected');
+      return;
+    }
+    
+    console.log('Files selected:', e.target.files.length);
+    
+    // Store the raw File objects directly
+    const selectedFiles = Array.from(e.target.files);
+    
+    // Log each file's properties to verify they're valid File objects
+    selectedFiles.forEach((file, index) => {
+      console.log(`Selected file ${index + 1}:`, {
+        name: file.name,
+        type: file.type || 'unknown type',
+        size: file.size,
+        lastModified: file.lastModified,
+        constructor: file.constructor.name
+      });
+    });
     
     const validFiles = selectedFiles.filter(file => {
-      if (file.type === "application/pdf" || file.type === "text/plain") {
-        return true;
-      }
-      toast({
-        title: "Invalid file type",
-        description: `${file.name} is not a valid file type. Please upload PDF or text files.`,
-        variant: "destructive",
-      });
-      return false;
+      // Accept all file types for debugging
+      return true;
     });
 
+    // Create new file objects with IDs for our state management
     const newFiles = validFiles.map(file => ({
       ...file,
       id: `${file.name}-${Date.now()}`,
-      name: file.name
+      name: file.name,
     }));
 
     setFiles(prev => [...prev, ...newFiles]);
@@ -82,7 +128,6 @@ export default function Admin() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validate form
     if (!selectedCourse || !selectedWeek || !selectedDay || !lessonTitle) {
       toast({
         title: "Missing information",
@@ -92,7 +137,11 @@ export default function Admin() {
       return;
     }
     
-    if (files.length === 0) {
+    // Check if we have files in the input element
+    const hasInputFiles = fileInputRef.current && fileInputRef.current.files && fileInputRef.current.files.length > 0;
+    
+    // If no files in input and no files in state, show error
+    if (!hasInputFiles && files.length === 0) {
       toast({
         title: "No files selected",
         description: "Please upload at least one file",
@@ -103,34 +152,108 @@ export default function Admin() {
 
     setIsSubmitting(true);
     try {
+      // Create a fresh FormData instance
       const formData = new FormData();
-      formData.append('courseId', selectedCourse);
-      formData.append('weekId', selectedWeek);
-      formData.append('dayId', selectedDay);
+      
+      // Add form fields
+      formData.append('courseId', String(selectedCourse));
+      formData.append('weekId', String(selectedWeek));
+      formData.append('dayId', String(selectedDay));
       formData.append('title', lessonTitle);
       
-      files.forEach(file => {
-        formData.append('files', file);
+      console.log('Form data values:', {
+        courseId: selectedCourse,
+        weekId: selectedWeek,
+        dayId: selectedDay,
+        title: lessonTitle
       });
-
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // IMPORTANT: Use the files directly from the input element if available
+      if (hasInputFiles) {
+        const inputFiles = fileInputRef.current!.files!;
+        console.log(`Adding ${inputFiles.length} files from input element`);
+        
+        for (let i = 0; i < inputFiles.length; i++) {
+          const file = inputFiles[i];
+          console.log(`Adding file ${i+1}/${inputFiles.length}:`, {
+            name: file.name,
+            type: file.type || 'unknown',
+            size: file.size
+          });
+          
+          // Add each file with the field name 'files'
+          formData.append('files', file);
+        }
+      } 
+      // Fallback to files in state if needed
+      else if (files.length > 0) {
+        console.log(`Adding ${files.length} files from state`);
+        
+        for (let i = 0; i < files.length; i++) {
+          const fileObj = files[i];
+          // Fix the type casting to avoid TypeScript errors
+          // FileWithPreview already extends File, so we can use it directly
+          
+          console.log(`Adding file ${i+1}/${files.length}:`, {
+            name: fileObj.name,
+            size: fileObj.size
+          });
+          
+          // Use the file object directly - it's already a File with our custom properties
+          formData.append('files', fileObj as unknown as Blob);
+        }
+      }
+      
+      // Verify FormData contains files
+      let fileCount = 0;
+      for (const [key, value] of formData.entries()) {
+        if (key === 'files') {
+          fileCount++;
+          console.log(`FormData contains file:`, {
+            key,
+            isFile: value instanceof File,
+            name: value instanceof File ? value.name : 'not a file',
+            type: value instanceof File ? value.type : 'unknown',
+            size: value instanceof File ? value.size : 'unknown'
+          });
+        } else {
+          console.log(`FormData field: ${key}=${value}`);
+        }
+      }
+      
+      if (fileCount === 0) {
+        throw new Error('No files were added to the form data');
+      }
+      
+      console.log(`FormData contains ${fileCount} files`);
+      
+      // Submit the form
+      const response = await api.uploadLesson(formData);
+      console.log('Upload successful:', response);
       
       toast({
         title: "Success",
         description: `Lesson "${lessonTitle}" uploaded successfully`,
       });
-      
+
       // Reset form
       setSelectedCourse("");
       setSelectedWeek("");
       setSelectedDay("");
       setLessonTitle("");
       setFiles([]);
-    } catch (error) {
+      
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    } catch (error: any) {
+      console.error('Lesson upload error:', error);
+      
+      // Show detailed error message
       toast({
         title: "Error",
-        description: "Failed to upload lesson. Please try again.",
+        description: error.response?.data?.message || error.message || "Failed to upload lesson",
         variant: "destructive",
       });
     } finally {
@@ -159,20 +282,21 @@ export default function Admin() {
     <div className="container max-w-4xl mx-auto py-4">
       <Card className="shadow-sm">
         <CardHeader className="pb-3">
-          <CardTitle className="text-xl">Course Material Upload</CardTitle>
+          <CardTitle className="text-2xl">Admin Lesson Upload</CardTitle>
         </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-3 gap-3">
-              {/* Course selection */}
-              <div>
-                <Label htmlFor="course" className="text-xs font-medium">Course</Label>
-                <Select 
-                  value={selectedCourse} 
+        <CardContent className="space-y-4">
+          <form onSubmit={handleSubmit}>
+            <div className="grid grid-cols-1 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="course">Select Course</Label>
+                <Select
+                  value={selectedCourse}
                   onValueChange={setSelectedCourse}
                 >
-                  <SelectTrigger className="h-9">
-                    <SelectValue placeholder="Select course" />
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select course">
+                      {selectedCourse && courses.find(course => course.id.toString() === selectedCourse)?.name}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {courses.map(course => (
@@ -183,16 +307,16 @@ export default function Admin() {
                   </SelectContent>
                 </Select>
               </div>
-
-              {/* Week selection */}
-              <div>
-                <Label htmlFor="week" className="text-xs font-medium">Week</Label>
-                <Select 
-                  value={selectedWeek} 
+              <div className="space-y-2">
+                <Label htmlFor="week">Select Week</Label>
+                <Select
+                  value={selectedWeek}
                   onValueChange={setSelectedWeek}
                 >
-                  <SelectTrigger className="h-9">
-                    <SelectValue placeholder="Select week" />
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select week">
+                      {selectedWeek && weeks.find(week => week.id.toString() === selectedWeek)?.name}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {weeks.map(week => (
@@ -203,16 +327,16 @@ export default function Admin() {
                   </SelectContent>
                 </Select>
               </div>
-
-              {/* Day selection */}
-              <div>
-                <Label htmlFor="day" className="text-xs font-medium">Day</Label>
-                <Select 
-                  value={selectedDay} 
+              <div className="space-y-2">
+                <Label htmlFor="day">Select Day</Label>
+                <Select
+                  value={selectedDay}
                   onValueChange={setSelectedDay}
                 >
-                  <SelectTrigger className="h-9">
-                    <SelectValue placeholder="Select day" />
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select day">
+                      {selectedDay && days.find(day => day.id.toString() === selectedDay)?.name}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {days.map(day => (
@@ -223,106 +347,114 @@ export default function Admin() {
                   </SelectContent>
                 </Select>
               </div>
-            </div>
-
-            {/* Lesson title */}
-            <div>
-              <Label htmlFor="lesson-title" className="text-xs font-medium">Lesson Title</Label>
-              <Input
-                id="lesson-title"
-                value={lessonTitle}
-                onChange={(e) => setLessonTitle(e.target.value)}
-                placeholder="Enter lesson title"
-                className="h-9"
-              />
-            </div>
-
-            {/* File upload */}
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <Label className="text-xs font-medium">Upload Materials</Label>
-                {files.length > 0 && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={addMoreFiles}
-                    className="h-7 text-xs"
-                  >
-                    <Plus className="h-3 w-3 mr-1" />
-                    Add Files
-                  </Button>
-                )}
+              <div className="space-y-2">
+                <Label htmlFor="lessonTitle">Lesson Title</Label>
+                <Input
+                  id="lessonTitle"
+                  value={lessonTitle}
+                  onChange={e => setLessonTitle(e.target.value)}
+                  placeholder="Enter lesson title"
+                />
               </div>
-              <Input
-                id="file-upload"
-                type="file"
-                ref={fileInputRef}
-                accept=".pdf,.txt"
-                onChange={handleFileSelect}
-                className="hidden"
-                multiple
-              />
-
-              {files.length === 0 ? (
-                <div className="border border-dashed rounded-md p-4 text-center">
-                  <label
-                    htmlFor="file-upload"
-                    className="flex flex-col items-center gap-1 cursor-pointer"
-                  >
-                    <Upload className="h-6 w-6 text-muted-foreground" />
-                    <span className="text-xs text-muted-foreground">
-                      Click to upload PDF or text files
+              <div className="space-y-2">
+                <Label htmlFor="files">Upload Files</Label>
+                <div className="flex flex-col gap-2">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple
+                    onChange={handleFileSelect}
+                    className="hidden"
+                    id="file-upload"
+                  />
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="secondary"
+                      onClick={addMoreFiles}
+                      disabled={isSubmitting}
+                      className="flex items-center"
+                    >
+                      <Upload className="mr-2 h-4 w-4" /> Select Files
+                    </Button>
+                    <span className="text-sm text-gray-500">
+                      {files.length === 0 
+                        ? "No files selected" 
+                        : `${files.length} file${files.length > 1 ? 's' : ''} selected`}
                     </span>
-                  </label>
-                </div>
-              ) : (
-                <ScrollArea className="h-[150px] w-full rounded-md border p-2">
-                  <div className="space-y-1">
-                    {files.map((file) => (
-                      <div 
-                        key={file.id}
-                        className="flex items-center justify-between p-1.5 border rounded-md bg-muted/30"
-                      >
-                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                          <FileText className="h-4 w-4 text-primary flex-shrink-0" />
-                          <span className="text-xs truncate">{file.name}</span>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeFile(file.id)}
-                          className="h-6 w-6 p-0"
-                        >
-                          <Trash2 className="h-3.5 w-3.5 text-red-500" />
-                        </Button>
-                      </div>
-                    ))}
                   </div>
-                </ScrollArea>
+                  <div className="text-xs text-gray-500 mt-1">
+                    Files will be uploaded when you submit the form. Make sure to select files before submitting.
+                  </div>
+                </div>
+              </div>
+              {files.length > 0 && (
+                <div className="border rounded-md p-3 bg-gray-50">
+                  <Label className="mb-2 block">Selected Files:</Label>
+                  <ScrollArea className="max-h-60">
+                    <ul className="space-y-2">
+                      {files.map(file => (
+                        <li key={file.id} className="flex items-center justify-between py-2 px-3 bg-white rounded border">
+                          <div className="flex items-center">
+                            <div className="mr-2">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                <polyline points="14 2 14 8 20 8"></polyline>
+                                <line x1="16" y1="13" x2="8" y2="13"></line>
+                                <line x1="16" y1="17" x2="8" y2="17"></line>
+                                <polyline points="10 9 9 9 8 9"></polyline>
+                              </svg>
+                            </div>
+                            <span className="text-sm">{file.name}</span>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeFile(file.id)}
+                            className="h-8 w-8 p-0"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <line x1="18" y1="6" x2="6" y2="18"></line>
+                              <line x1="6" y1="6" x2="18" y2="18"></line>
+                            </svg>
+                            <span className="sr-only">Remove</span>
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  </ScrollArea>
+                </div>
               )}
-            </div>
-
-            <div className="flex justify-end pt-2">
               <Button 
-                type="submit"
+                type="submit" 
                 disabled={isSubmitting}
-                size="sm"
-                className="px-4"
+                className="w-full mt-4"
               >
                 {isSubmitting ? (
-                  <span className="flex items-center gap-1">
-                    <span className="animate-spin">⏳</span> Uploading...
-                  </span>
+                  <>
+                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Uploading Lesson...
+                  </>
                 ) : (
-                  "Upload Lesson"
+                  <>
+                    <Upload className="mr-2 h-5 w-5" />
+                    Upload Lesson
+                  </>
                 )}
               </Button>
+              
+              {isSubmitting && (
+                <div className="mt-4 p-3 bg-blue-50 text-blue-700 rounded-md text-sm">
+                  <p className="font-medium">Uploading lesson...</p>
+                  <p className="mt-1">This may take a moment depending on the file size. Please don't close this page.</p>
+                </div>
+              )}
             </div>
           </form>
         </CardContent>
       </Card>
     </div>
   );
-} 
+}
