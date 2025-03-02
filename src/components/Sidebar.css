@@ -1,0 +1,37 @@
+.sidebar {
+    width: 200px;
+    transition: width 0.3s;
+    /* ...existing code... */
+}
+
+.sidebar.collapsed {
+    width: 50px;
+}
+
+.sidebar ul li {
+    display: flex;
+    align-items: center;
+    /* ...existing code... */
+}
+
+.sidebar ul li i {
+    margin-right: 10px;
+}
+
+.sidebar.collapsed ul li span {
+    display: none;
+}
+
+.toggle-btn {
+    background-color: #007bff;
+    color: white;
+    border: none;
+    padding: 10px;
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+}
+
+.toggle-btn:hover {
+    background-color: #0056b3;
+}

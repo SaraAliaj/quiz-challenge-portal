@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { useToast } from "@/components/ui/use-toast";
 import { Input } from "@/components/ui/input";
-import { Upload, Plus, Loader2, FileText } from "lucide-react";
+import { Upload, Plus, Loader2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
@@ -25,25 +25,17 @@ interface FileWithPreview extends File {
 
 export default function Admin() {
   const [files, setFiles] = useState<FileWithPreview[]>([]);
-  const [pdfFile, setPdfFile] = useState<FileWithPreview | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isPdfSubmitting, setIsPdfSubmitting] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState<string>("");
   const [selectedWeek, setSelectedWeek] = useState<string>("");
   const [selectedDay, setSelectedDay] = useState<string>("");
   const [lessonTitle, setLessonTitle] = useState<string>("");
-  const [pdfLessonTitle, setPdfLessonTitle] = useState<string>("");
-  const [pdfCourse, setPdfCourse] = useState<string>("");
-  const [pdfWeek, setPdfWeek] = useState<string>("");
-  const [pdfDay, setPdfDay] = useState<string>("");
   const [courses, setCourses] = useState<any[]>([]);
   const [weeks, setWeeks] = useState<any[]>([]);
   const [days, setDays] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("regular");
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const pdfInputRef = useRef<HTMLInputElement>(null);
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -52,17 +44,7 @@ export default function Admin() {
     const fetchData = async () => {
       setIsLoading(true);
       try {
-        // Check if user is admin
-        if (user && user.role !== 'admin') {
-          toast({
-            title: "Access Denied",
-            description: "You don't have permission to access the admin panel",
-            variant: "destructive",
-          });
-          navigate('/');
-          return;
-        }
-        
+        // Remove the check for admin role
         // Fetch all data in parallel
         const [coursesData, weeksData, daysData] = await Promise.all([
           api.getCourses(),
@@ -124,41 +106,6 @@ export default function Admin() {
         description: `Added ${newFiles.length} files`,
       });
     }
-  };
-
-  const handlePdfSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!e.target.files || e.target.files.length === 0) {
-      console.log('No PDF selected');
-      return;
-    }
-    
-    // Only use the first file if multiple are selected
-    const file = e.target.files[0];
-    
-    // Check if it's a PDF
-    if (!file.type.includes('pdf')) {
-      toast({
-        title: "Invalid File",
-        description: "Please select a PDF file",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    // Create a new file object with ID
-    const newFile = {
-      ...file,
-      id: `${file.name}-${Date.now()}`,
-      name: file.name,
-      originalFile: file
-    };
-    
-    setPdfFile(newFile);
-    
-    toast({
-      title: "PDF Added",
-      description: `Added: ${newFile.name}`,
-    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -235,77 +182,6 @@ export default function Admin() {
     }
   };
 
-  const handlePdfSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!pdfCourse || !pdfWeek || !pdfDay || !pdfLessonTitle) {
-      toast({
-        title: "Missing information",
-        description: "Please fill in all required fields",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    // Check if we have a PDF file
-    if (!pdfFile) {
-      toast({
-        title: "No PDF selected",
-        description: "Please upload a PDF file",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsPdfSubmitting(true);
-    try {
-      // Create a fresh FormData instance
-      const formData = new FormData();
-      
-      // Add form fields
-      formData.append('courseId', String(pdfCourse));
-      formData.append('weekId', String(pdfWeek));
-      formData.append('dayId', String(pdfDay));
-      formData.append('title', pdfLessonTitle);
-      
-      // Add PDF file
-      const fileToUpload = (pdfFile as any).originalFile || pdfFile;
-      formData.append('pdfFile', fileToUpload);
-      
-      // Submit the form
-      const response = await api.uploadPDFLesson(formData);
-      console.log('PDF upload successful:', response);
-      
-      toast({
-        title: "Success",
-        description: `PDF Lesson "${pdfLessonTitle}" processed and uploaded successfully`,
-      });
-
-      // Reset form
-      setPdfCourse("");
-      setPdfWeek("");
-      setPdfDay("");
-      setPdfLessonTitle("");
-      setPdfFile(null);
-      
-      // Reset file input
-      if (pdfInputRef.current) {
-        pdfInputRef.current.value = "";
-      }
-    } catch (error: any) {
-      console.error('PDF lesson upload error:', error);
-      
-      // Show detailed error message
-      toast({
-        title: "Error",
-        description: error.response?.data?.message || error.message || "Failed to process and upload PDF lesson",
-        variant: "destructive",
-      });
-    } finally {
-      setIsPdfSubmitting(false);
-    }
-  };
-
   const removeFile = (fileId: string) => {
     const fileToRemove = files.find(f => f.id === fileId);
     if (fileToRemove) {
@@ -317,30 +193,9 @@ export default function Admin() {
     }
   };
 
-  const removePdf = () => {
-    if (pdfFile) {
-      setPdfFile(null);
-      toast({
-        title: "PDF Removed",
-        description: `Removed: ${pdfFile.name}`,
-      });
-      
-      // Reset file input
-      if (pdfInputRef.current) {
-        pdfInputRef.current.value = "";
-      }
-    }
-  };
-
   const addMoreFiles = () => {
     if (fileInputRef.current) {
       fileInputRef.current.click();
-    }
-  };
-
-  const selectPdf = () => {
-    if (pdfInputRef.current) {
-      pdfInputRef.current.click();
     }
   };
 
@@ -362,10 +217,9 @@ export default function Admin() {
           <CardTitle className="text-2xl">Admin Panel</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Tabs defaultValue="regular" value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-2 mb-4">
-              <TabsTrigger value="regular">Regular Upload</TabsTrigger>
-              <TabsTrigger value="pdf">PDF Upload (AI Enhanced)</TabsTrigger>
+          <Tabs defaultValue="regular">
+            <TabsList className="grid w-full grid-cols-1 mb-4">
+              {/* Remove the "Regular Upload" header */}
             </TabsList>
             
             <TabsContent value="regular">
@@ -533,168 +387,6 @@ export default function Admin() {
                     <div className="mt-4 p-3 bg-blue-50 text-blue-700 rounded-md text-sm">
                       <p className="font-medium">Uploading lesson...</p>
                       <p className="mt-1">This may take a moment depending on the file size. Please don't close this page.</p>
-                    </div>
-                  )}
-                </div>
-              </form>
-            </TabsContent>
-            
-            <TabsContent value="pdf">
-              <div className="p-4 mb-4 bg-blue-50 rounded-md">
-                <h3 className="text-lg font-medium text-blue-800 mb-2">AI-Enhanced PDF Processing</h3>
-                <p className="text-sm text-blue-700">
-                  Upload a PDF file to be processed with AI. The system will extract text, generate a summary, 
-                  identify sections, and create question-answer pairs to enhance the learning experience.
-                </p>
-              </div>
-              
-              <form onSubmit={handlePdfSubmit}>
-                <div className="grid grid-cols-1 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="pdfCourse">Select Course</Label>
-                    <Select
-                      value={pdfCourse}
-                      onValueChange={setPdfCourse}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select course">
-                          {pdfCourse && courses.find(course => course.id.toString() === pdfCourse)?.name}
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {courses.map(course => (
-                          <SelectItem key={course.id} value={course.id.toString()}>
-                            {course.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="pdfWeek">Select Week</Label>
-                    <Select
-                      value={pdfWeek}
-                      onValueChange={setPdfWeek}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select week">
-                          {pdfWeek && weeks.find(week => week.id.toString() === pdfWeek)?.name}
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {weeks.map(week => (
-                          <SelectItem key={week.id} value={week.id.toString()}>
-                            {week.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="pdfDay">Select Day</Label>
-                    <Select
-                      value={pdfDay}
-                      onValueChange={setPdfDay}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select day">
-                          {pdfDay && days.find(day => day.id.toString() === pdfDay)?.name}
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {days.map(day => (
-                          <SelectItem key={day.id} value={day.id.toString()}>
-                            {day.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="pdfLessonTitle">Lesson Title</Label>
-                    <Input
-                      id="pdfLessonTitle"
-                      value={pdfLessonTitle}
-                      onChange={e => setPdfLessonTitle(e.target.value)}
-                      placeholder="Enter lesson title"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="pdfFile">Upload PDF</Label>
-                    <div className="flex flex-col gap-2">
-                      <input
-                        ref={pdfInputRef}
-                        type="file"
-                        accept=".pdf"
-                        onChange={handlePdfSelect}
-                        className="hidden"
-                        id="pdf-upload"
-                      />
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="secondary"
-                          onClick={selectPdf}
-                          disabled={isPdfSubmitting}
-                          className="flex items-center"
-                        >
-                          <FileText className="mr-2 h-4 w-4" /> Select PDF
-                        </Button>
-                        <span className="text-sm text-gray-500">
-                          {!pdfFile ? "No PDF selected" : `Selected: ${pdfFile.name}`}
-                        </span>
-                      </div>
-                      <div className="text-xs text-gray-500 mt-1">
-                        Only PDF files are supported. The file will be processed with AI to extract content and generate learning materials.
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {pdfFile && (
-                    <div className="border rounded-md p-3 bg-gray-50">
-                      <Label className="mb-2 block">Selected PDF:</Label>
-                      <div className="flex items-center justify-between py-2 px-3 bg-white rounded border">
-                        <div className="flex items-center">
-                          <FileText className="mr-2 h-4 w-4 text-red-500" />
-                          <span className="text-sm">{pdfFile.name}</span>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={removePdf}
-                          className="h-8 w-8 p-0"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <line x1="18" y1="6" x2="6" y2="18"></line>
-                            <line x1="6" y1="6" x2="18" y2="18"></line>
-                          </svg>
-                          <span className="sr-only">Remove</span>
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                  
-                  <Button 
-                    type="submit" 
-                    disabled={isPdfSubmitting}
-                    className="w-full mt-4"
-                  >
-                    {isPdfSubmitting ? (
-                      <>
-                        <Loader2 className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" />
-                        Processing PDF...
-                      </>
-                    ) : (
-                      <>
-                        <FileText className="mr-2 h-5 w-5" />
-                        Process & Upload PDF
-                      </>
-                    )}
-                  </Button>
-                  
-                  {isPdfSubmitting && (
-                    <div className="mt-4 p-3 bg-blue-50 text-blue-700 rounded-md text-sm">
-                      <p className="font-medium">Processing PDF with AI...</p>
-                      <p className="mt-1">This may take several minutes depending on the file size and complexity. Please don't close this page.</p>
                     </div>
                   )}
                 </div>

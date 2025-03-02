@@ -54,6 +54,7 @@ const courses = [
 export default function Sidebar() {
   const [expandedCourse, setExpandedCourse] = useState<number | null>(null);
   const [expandedWeek, setExpandedWeek] = useState<{courseId: number, weekId: number} | null>(null);
+  const [collapsed, setCollapsed] = useState(false);
 
   const toggleCourse = (courseId: number) => {
     setExpandedCourse(expandedCourse === courseId ? null : courseId);
@@ -68,14 +69,21 @@ export default function Sidebar() {
     );
   };
 
+  const toggleSidebar = () => {
+    setCollapsed(!collapsed);
+  };
+
   return (
-    <div className="h-screen w-64 bg-white border-r flex flex-col">
+    <div className={`h-screen ${collapsed ? 'w-16' : 'w-64'} bg-white border-r flex flex-col transition-width duration-300`}>
       <div className="p-4">
         <Link to="/" className="flex items-center space-x-2">
           <GraduationCap className="h-6 w-6" />
-          <span className="font-bold text-xl">AI School</span>
+          {!collapsed && <span className="font-bold text-xl">AI School</span>}
         </Link>
       </div>
+      <button className="toggle-btn p-2" onClick={toggleSidebar}>
+        {collapsed ? 'Expand' : 'Collapse'}
+      </button>
       <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
         <div className="space-y-2">
           <div className="font-semibold text-sm text-gray-500 uppercase tracking-wider px-2">
@@ -90,7 +98,7 @@ export default function Sidebar() {
               >
                 <div className="flex items-center">
                   <Book className="mr-2 h-4 w-4" />
-                  <span>{course.title}</span>
+                  {!collapsed && <span>{course.title}</span>}
                 </div>
                 <ChevronDown
                   className={`h-4 w-4 transition-transform ${
@@ -159,19 +167,19 @@ export default function Sidebar() {
           <Link to="/challenges">
             <Button variant="ghost" className="w-full justify-start">
               <Award className="mr-2 h-4 w-4" />
-              Challenges
+              {!collapsed && <span>Challenges</span>}
             </Button>
           </Link>
           <Link to="/quizzes">
             <Button variant="ghost" className="w-full justify-start">
               <Trophy className="mr-2 h-4 w-4" />
-              Weekly Quizzes
+              {!collapsed && <span>Weekly Quizzes</span>}
             </Button>
           </Link>
           <Link to="/chat">
             <Button variant="ghost" className="w-full justify-start">
               <MessageCircle className="mr-2 h-4 w-4" />
-              AI Chat
+              {!collapsed && <span>AI Chat</span>}
             </Button>
           </Link>
         </div>
