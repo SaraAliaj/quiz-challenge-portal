@@ -7,6 +7,7 @@ import jwt from 'jsonwebtoken';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import pdfIntegration from './pdf_integration.js';
 
 const app = express();
 
@@ -52,18 +53,18 @@ const ensureTablesExist = async () => {
       console.log('Creating lessons table...');
       
       // Create the lessons table
-      await promisePool.query(`
-        CREATE TABLE IF NOT EXISTS lessons (
-          id INT AUTO_INCREMENT PRIMARY KEY,
-          course_id INT NOT NULL,
-          week_id INT NOT NULL,
-          day_id INT NOT NULL,
-          lesson_name VARCHAR(255) NOT NULL,
-          file_path VARCHAR(255) NOT NULL,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-      `);
-      console.log('Lessons table created successfully');
+        await promisePool.query(`
+          CREATE TABLE IF NOT EXISTS lessons (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            course_id INT NOT NULL,
+            week_id INT NOT NULL,
+            day_id INT NOT NULL,
+            lesson_name VARCHAR(255) NOT NULL,
+            file_path VARCHAR(255) NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          )
+        `);
+        console.log('Lessons table created successfully');
     } else {
       // Check lessons table structure
       const [structure] = await promisePool.query('DESCRIBE lessons');
@@ -419,13 +420,78 @@ app.get('/api/weeks', async (req, res) => {
 // Get all days
 app.get('/api/days', async (req, res) => {
   try {
-    const [rows] = await promisePool.query(
-      'SELECT id, day_name AS name FROM days'
-    );
-    res.json(rows); // Send all days to the client
+    const [rows] = await promisePool.query('SELECT * FROM days');
+    res.json(rows);
   } catch (error) {
     console.error('Error fetching days:', error);
-    res.status(500).json({ message: 'Failed to fetch days' });
+    res.status(500).json({ error: 'Failed to fetch days' });
+  }
+});
+
+// New endpoint to fetch lessons
+app.get('/api/lessons', async (req, res) => {
+  try {
+    const [rows] = await promisePool.query(`
+      SELECT l.id, l.lesson_name as title, l.course_id, l.week_id, l.day_id, 
+             c.name as course_name, w.name as week_name, d.day_name as day_name
+      FROM lessons l
+      JOIN courses c ON l.course_id = c.id
+      JOIN weeks w ON l.week_id = w.id
+      JOIN days d ON l.day_id = d.id
+      ORDER BY c.id, w.id, d.id
+    `);
+    res.json(rows);
+  } catch (error) {
+    console.error('Error fetching lessons:', error);
+    res.status(500).json({ error: 'Failed to fetch lessons' });
+  }
+});
+
+// New endpoint to fetch lesson content by ID
+app.get('/api/lessons/:id/content', async (req, res) => {
+  try {
+    const lessonId = req.params.id;
+    
+    // Get the lesson details including file path
+    const [lessons] = await promisePool.query(
+      'SELECT * FROM lessons WHERE id = ?',
+      [lessonId]
+    );
+    
+    if (lessons.length === 0) {
+      return res.status(404).json({ error: 'Lesson not found' });
+    }
+    
+    const lesson = lessons[0];
+    const filePath = lesson.file_path;
+    
+    // Check if file exists
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'Lesson file not found' });
+    }
+    
+    // For PDF files, return file info but not the content
+    if (filePath.toLowerCase().endsWith('.pdf')) {
+      return res.json({
+        id: lesson.id,
+        title: lesson.lesson_name,
+        fileType: 'pdf',
+        fileName: path.basename(filePath)
+      });
+    }
+    
+    // For non-PDF files, return the content as before
+    const fileContent = fs.readFileSync(filePath, 'utf8');
+    res.json({
+      id: lesson.id,
+      title: lesson.lesson_name,
+      content: fileContent,
+      fileType: path.extname(filePath).substring(1) || 'txt',
+      fileName: path.basename(filePath)
+    });
+  } catch (error) {
+    console.error('Error fetching lesson content:', error);
+    res.status(500).json({ error: 'Failed to fetch lesson content' });
   }
 });
 
@@ -649,7 +715,132 @@ app.post('/api/lessons', (req, res) => {
   });
 });
 
-const PORT = process.env.PORT || 3002;
+// New endpoint for uploading and processing PDF lessons
+app.post('/api/lessons/pdf', (req, res) => {
+  console.log('Received PDF lesson upload request');
+  
+  // Use single middleware function for file upload
+  upload.single('pdfFile')(req, res, async function(err) {
+    if (err) {
+      console.error('Multer error:', err);
+      return res.status(400).json({ message: 'File upload error', error: err.message });
+    }
+    
+    console.log('File received:', req.file);
+    if (!req.file) {
+      console.error('No file was uploaded');
+      return res.status(400).json({ 
+        message: 'Missing required file', 
+        missingFields: ['pdfFile'] 
+      });
+    }
+    
+    const { courseId, weekId, dayId, title } = req.body;
+    
+    // Validate other required fields
+    const missingFields = [];
+    if (!courseId) missingFields.push('courseId');
+    if (!weekId) missingFields.push('weekId');
+    if (!dayId) missingFields.push('dayId');
+    if (!title) missingFields.push('title');
+    
+    if (missingFields.length > 0) {
+      console.log('Missing required fields:', missingFields);
+      return res.status(400).json({ 
+        message: 'Missing required fields', 
+        missingFields 
+      });
+    }
+    
+    // Convert IDs to integers
+    const courseIdInt = parseInt(courseId, 10);
+    const weekIdInt = parseInt(weekId, 10);
+    const dayIdInt = parseInt(dayId, 10);
+    
+    if (isNaN(courseIdInt) || isNaN(weekIdInt) || isNaN(dayIdInt)) {
+      return res.status(400).json({ 
+        message: 'Invalid ID values', 
+        details: {
+          courseId: isNaN(courseIdInt) ? 'Invalid' : 'Valid',
+          weekId: isNaN(weekIdInt) ? 'Invalid' : 'Valid',
+          dayId: isNaN(dayIdInt) ? 'Invalid' : 'Valid'
+        }
+      });
+    }
+    
+    try {
+      // Process the PDF file
+      const result = await pdfIntegration.processAndAddLesson(req.file.path, {
+        courseId: courseIdInt,
+        weekId: weekIdInt,
+        dayId: dayIdInt,
+        title
+      });
+      
+      if (result.success) {
+        res.status(201).json({ 
+          message: 'PDF lesson processed and uploaded successfully',
+          lessonId: result.lessonId
+        });
+      } else {
+        res.status(500).json({ 
+          message: 'Failed to process PDF lesson',
+          error: result.error
+        });
+      }
+    } catch (error) {
+      console.error('Error processing PDF lesson:', error);
+      res.status(500).json({ 
+        message: 'Failed to process PDF lesson',
+        error: error.message
+      });
+    }
+  });
+});
+
+// Endpoint to download lesson file
+app.get('/api/lessons/:id/download', async (req, res) => {
+  try {
+    const lessonId = req.params.id;
+    
+    const [lessons] = await promisePool.query(
+      'SELECT * FROM lessons WHERE id = ?',
+      [lessonId]
+    );
+    
+    if (lessons.length === 0) {
+      return res.status(404).json({ error: 'Lesson not found' });
+    }
+    
+    const lesson = lessons[0];
+    const filePath = lesson.file_path;
+    
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'Lesson file not found' });
+    }
+
+    // Important: Set these headers to display PDF inline
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'inline');  // This is crucial - 'inline' instead of 'attachment'
+    res.setHeader('Accept-Ranges', 'bytes');
+    
+    // Stream the file
+    const fileStream = fs.createReadStream(filePath);
+    fileStream.pipe(res);
+    
+    fileStream.on('error', (error) => {
+      console.error('Error streaming PDF:', error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Failed to stream PDF' });
+      }
+    });
+  } catch (error) {
+    console.error('Error serving PDF:', error);
+    res.status(500).json({ error: 'Failed to serve PDF' });
+  }
+});
+
+const PORT = process.env.PORT || 3003;
 
 // Start server with better error handling
 const startServer = async () => {

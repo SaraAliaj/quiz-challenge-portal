@@ -50,7 +50,7 @@ export default function Layout() {
   const [openWeeks, setOpenWeeks] = useState<string[]>([]);
   const [completedLessons, setCompletedLessons] = useState<string[]>([]);
   const [isCurriculumOpen, setIsCurriculumOpen] = useState(false);
-  const [activeLesson, setActiveLesson] = useState<string | null>(null);
+  const [activeLesson, setActiveLesson] = useState<{id: string, name: string} | null>(null);
   const [courses, setCourses] = useState<Course[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -62,6 +62,7 @@ export default function Layout() {
         // This is a placeholder - you'll need to implement this API endpoint
         // to return the full course structure with weeks and lessons
         const coursesData = await api.getCourseStructure();
+        console.log('Course structure data:', coursesData);
         setCourses(coursesData);
       } catch (error) {
         console.error("Failed to fetch course data:", error);
@@ -104,11 +105,11 @@ export default function Layout() {
     navigate('/login');
   };
 
-  const handleLessonClick = (lessonName: string) => {
+  const handleLessonClick = (lessonId: string, lessonName: string) => {
     // Reset scroll position to top
     window.scrollTo(0, 0);
     
-    setActiveLesson(lessonName);
+    setActiveLesson({id: lessonId, name: lessonName});
   };
 
   // Check if user has admin role
@@ -192,9 +193,9 @@ export default function Layout() {
                                           key={lesson.id}
                                           className={cn(
                                             "flex items-center justify-between px-3 py-2 text-sm text-gray-600 hover:bg-gray-200 rounded-lg cursor-pointer",
-                                            activeLesson === lesson.name && "bg-gray-200 font-semibold"
+                                            activeLesson?.id === lesson.id && "bg-gray-200 font-semibold"
                                           )}
-                                          onClick={() => handleLessonClick(lesson.name)}
+                                          onClick={() => handleLessonClick(lesson.id, lesson.name)}
                                         >
                                           <span className={cn(
                                             "font-medium",
@@ -257,7 +258,7 @@ export default function Layout() {
           <div className="h-full flex flex-col">
             {activeLesson ? (
               <div className="flex-1 h-screen overflow-hidden">
-                <LessonChatbot lessonTitle={activeLesson} />
+                <LessonChatbot lessonId={activeLesson.id} lessonTitle={activeLesson.name} />
               </div>
             ) : (
               <div className="container mx-auto p-6">

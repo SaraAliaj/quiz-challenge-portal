@@ -116,40 +116,85 @@ const api = {
     }
   },
 
+  getLessons: async () => {
+    try {
+      const response = await axiosInstance.get('/lessons');
+      return response.data;
+    } catch (error) {
+      console.error('Failed to fetch lessons:', error);
+      throw error;
+    }
+  },
+
+  getLessonContent: async (lessonId: string) => {
+    try {
+      const response = await axiosInstance.get(`/lessons/${lessonId}/content`);
+      return response.data;
+    } catch (error) {
+      console.error('Failed to fetch lesson content:', error);
+      throw error;
+    }
+  },
+
+  downloadLessonFile: (lessonId: string) => {
+    // Return the URL for direct download
+    return `${axiosInstance.defaults.baseURL}/lessons/${lessonId}/download`;
+  },
+
   // New method to fetch the full course structure with weeks and lessons
   getCourseStructure: async () => {
     try {
-      // For now, we'll construct the course structure from separate API calls
-      // In the future, you might want to create a dedicated endpoint for this
-      const [coursesResponse, weeksResponse, daysResponse] = await Promise.all([
-        axiosInstance.get('/courses'),
-        axiosInstance.get('/weeks'),
-        axiosInstance.get('/days')
-      ]);
+      // Fetch lessons which include course, week, and day information
+      const lessonsResponse = await axiosInstance.get('/lessons');
+      const lessons = lessonsResponse.data;
 
-      const courses = coursesResponse.data;
-      const weeks = weeksResponse.data;
-      const days = daysResponse.data;
+      // Group lessons by course, week, and day
+      const courseMap = new Map();
 
-      // This is a temporary implementation that creates a mock structure
-      // You should replace this with actual data from your backend
-      return courses.map(course => ({
-        id: course.id.toString(),
-        name: course.name,
-        weeks: weeks.map(week => ({
-          id: week.id.toString(),
-          name: week.name,
-          lessons: days.map(day => ({
-            id: `lesson-${course.id}-${week.id}-${day.id}`,
-            name: `${course.name} - ${week.name} - ${day.name}`,
-            time: "09:00 AM"
-          }))
-        }))
+      // Process each lesson to build the course structure
+      lessons.forEach(lesson => {
+        const courseId = lesson.course_id.toString();
+        const weekId = lesson.week_id.toString();
+        const dayId = lesson.day_id.toString();
+        
+        // Initialize course if not exists
+        if (!courseMap.has(courseId)) {
+          courseMap.set(courseId, {
+            id: courseId,
+            name: lesson.course_name,
+            weeks: new Map()
+          });
+        }
+        
+        const course = courseMap.get(courseId);
+        
+        // Initialize week if not exists
+        if (!course.weeks.has(weekId)) {
+          course.weeks.set(weekId, {
+            id: weekId,
+            name: lesson.week_name,
+            lessons: []
+          });
+        }
+        
+        // Add lesson to the week
+        course.weeks.get(weekId).lessons.push({
+          id: lesson.id.toString(),
+          name: `${lesson.day_name}: ${lesson.title}`,
+          time: "09:00 AM" // Default time
+        });
+      });
+
+      // Convert maps to arrays for the final structure
+      const result = Array.from(courseMap.values()).map(course => ({
+        ...course,
+        weeks: Array.from(course.weeks.values())
       }));
+
+      return result;
     } catch (error) {
       console.error('Failed to fetch course structure:', error);
-      // Return empty array on error to avoid breaking the UI
-      return [];
+      throw error;
     }
   },
 
@@ -188,6 +233,54 @@ const api = {
       return response.data;
     } catch (error) {
       console.error('Failed to upload lesson:', error);
+      if (axios.isAxiosError(error)) {
+        console.error('Axios error details:', {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          data: error.response?.data,
+          headers: error.response?.headers
+        });
+      }
+      throw error;
+    }
+  },
+
+  // New method to upload a PDF file as a lesson
+  uploadPDFLesson: async (formData: FormData) => {
+    try {
+      console.log('Starting PDF lesson upload request');
+      
+      // Log FormData entries for debugging
+      console.log('FormData entries:');
+      for (const pair of (formData as any).entries()) {
+        const [key, value] = pair;
+        if (key === 'pdfFile') {
+          console.log(`File entry: ${key}, filename: ${value instanceof File ? value.name : 'not a file'}`);
+        } else {
+          console.log(`Form field: ${key}=${value}`);
+        }
+      }
+      
+      // Create a separate axios instance without auth interceptors for this request
+      const noAuthAxios = axios.create({
+        baseURL: '/api',
+        timeout: 120000, // Increase timeout for PDF processing (120 seconds)
+        withCredentials: true
+      });
+      
+      console.log('Sending POST request to /lessons/pdf');
+      
+      // Use the original FormData directly
+      const response = await noAuthAxios.post('/lessons/pdf', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        }
+      });
+      
+      console.log('PDF lesson upload successful:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('Failed to upload PDF lesson:', error);
       if (axios.isAxiosError(error)) {
         console.error('Axios error details:', {
           status: error.response?.status,
