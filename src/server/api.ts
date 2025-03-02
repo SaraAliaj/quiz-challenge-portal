@@ -116,6 +116,43 @@ const api = {
     }
   },
 
+  // New method to fetch the full course structure with weeks and lessons
+  getCourseStructure: async () => {
+    try {
+      // For now, we'll construct the course structure from separate API calls
+      // In the future, you might want to create a dedicated endpoint for this
+      const [coursesResponse, weeksResponse, daysResponse] = await Promise.all([
+        axiosInstance.get('/courses'),
+        axiosInstance.get('/weeks'),
+        axiosInstance.get('/days')
+      ]);
+
+      const courses = coursesResponse.data;
+      const weeks = weeksResponse.data;
+      const days = daysResponse.data;
+
+      // This is a temporary implementation that creates a mock structure
+      // You should replace this with actual data from your backend
+      return courses.map(course => ({
+        id: course.id.toString(),
+        name: course.name,
+        weeks: weeks.map(week => ({
+          id: week.id.toString(),
+          name: week.name,
+          lessons: days.map(day => ({
+            id: `lesson-${course.id}-${week.id}-${day.id}`,
+            name: `${course.name} - ${week.name} - ${day.name}`,
+            time: "09:00 AM"
+          }))
+        }))
+      }));
+    } catch (error) {
+      console.error('Failed to fetch course structure:', error);
+      // Return empty array on error to avoid breaking the UI
+      return [];
+    }
+  },
+
   uploadLesson: async (formData: FormData) => {
     try {
       console.log('Starting lesson upload request');

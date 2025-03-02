@@ -7,6 +7,7 @@ interface User {
   username: string;
   surname: string; 
   email: string;
+  role?: string;
 }
 
 interface AuthContextType {
@@ -41,7 +42,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (response.valid) {
         const userData = localStorage.getItem('user');
         if (userData) {
-          setUser(JSON.parse(userData));
+          const parsedUser = JSON.parse(userData);
+          // Ensure user has a role property, default to 'user' if not present
+          if (!parsedUser.role) {
+            parsedUser.role = 'user';
+          }
+          setUser(parsedUser);
           setIsAuthenticated(true);
           return true;
         }
@@ -58,7 +64,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Instead, trust the cached token
       const userData = localStorage.getItem('user');
       if (userData) {
-        setUser(JSON.parse(userData));
+        const parsedUser = JSON.parse(userData);
+        // Ensure user has a role property, default to 'user' if not present
+        if (!parsedUser.role) {
+          parsedUser.role = 'user';
+        }
+        setUser(parsedUser);
         setIsAuthenticated(true);
         return true;
       }
@@ -80,7 +91,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           console.error('Auth initialization error:', error);
           // If server is unreachable, still use cached credentials
           setIsAuthenticated(true);
-          setUser(JSON.parse(userData));
+          const parsedUser = JSON.parse(userData);
+          // Ensure user has a role property, default to 'user' if not present
+          if (!parsedUser.role) {
+            parsedUser.role = 'user';
+          }
+          setUser(parsedUser);
         }
       }
       setIsLoading(false);
@@ -92,6 +108,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string) => {
     try {
       const response = await api.login(email, password);
+      // Ensure user has a role property, default to 'user' if not present
+      if (!response.user.role) {
+        response.user.role = 'user';
+      }
       localStorage.setItem('authToken', response.token);
       localStorage.setItem('user', JSON.stringify(response.user));
       setIsAuthenticated(true);
@@ -110,6 +130,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }) => {
     try {
       const response = await api.register(userData);
+      // Ensure user has a role property, default to 'user' if not present
+      if (!response.user.role) {
+        response.user.role = 'user';
+      }
       localStorage.setItem('authToken', response.token);
       localStorage.setItem('user', JSON.stringify(response.user));
       setIsAuthenticated(true);

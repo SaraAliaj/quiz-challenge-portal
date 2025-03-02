@@ -19,15 +19,7 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Database configuration
-const db = mysql.createConnection({
-  host: process.env.DB_HOST || 'localhost',
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || 'password',
-  database: process.env.DB_NAME || 'aischool'
-});
-
-// Replace with a connection pool
+// Create a connection pool
 const pool = mysql.createPool({
   host: process.env.DB_HOST || 'localhost',
   user: process.env.DB_USER || 'root',
@@ -51,6 +43,62 @@ console.log('Database configuration:', {
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
+// Utility function to ensure required tables exist
+const ensureTablesExist = async () => {
+  try {
+    // Check if lessons table exists
+    const [lessonsCheck] = await promisePool.query('SHOW TABLES LIKE "lessons"');
+    if (lessonsCheck.length === 0) {
+      console.log('Creating lessons table...');
+      
+      // Create the lessons table
+      await promisePool.query(`
+        CREATE TABLE IF NOT EXISTS lessons (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          course_id INT NOT NULL,
+          week_id INT NOT NULL,
+          day_id INT NOT NULL,
+          lesson_name VARCHAR(255) NOT NULL,
+          file_path VARCHAR(255) NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      console.log('Lessons table created successfully');
+    } else {
+      // Check lessons table structure
+      const [structure] = await promisePool.query('DESCRIBE lessons');
+      console.log('Lessons table structure:', structure);
+      
+      // Check if required columns exist
+      const columns = structure.map(col => col.Field);
+      const requiredColumns = ['course_id', 'week_id', 'day_id', 'lesson_name', 'file_path'];
+      const missingColumns = requiredColumns.filter(col => !columns.includes(col));
+      
+      if (missingColumns.length > 0) {
+        console.log('Missing columns in lessons table:', missingColumns);
+        
+        // Add missing columns
+        for (const column of missingColumns) {
+          let columnType = '';
+          if (['course_id', 'week_id', 'day_id'].includes(column)) {
+            columnType = 'INT NOT NULL';
+          } else {
+            columnType = 'VARCHAR(255) NOT NULL';
+          }
+          
+          await promisePool.query(`ALTER TABLE lessons ADD COLUMN ${column} ${columnType}`);
+          console.log(`Added column ${column} to lessons table`);
+        }
+      }
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Failed to ensure tables exist:', error);
+    throw error;
+  }
+};
+
 // Improved database connection handling
 const connectToDatabase = async () => {
   try {
@@ -59,33 +107,8 @@ const connectToDatabase = async () => {
     console.log('Successfully connected to MySQL');
     console.log('Database test query successful:', results);
     
-    // Check if lessons table exists
-    const [lessonsCheck] = await promisePool.query('SHOW TABLES LIKE "lessons"');
-    if (lessonsCheck.length === 0) {
-      console.error('WARNING: lessons table does not exist!');
-      
-      // Create the lessons table
-      try {
-        await promisePool.query(`
-          CREATE TABLE IF NOT EXISTS lessons (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            course_id INT NOT NULL,
-            week_id INT NOT NULL,
-            day_id INT NOT NULL,
-            lesson_name VARCHAR(255) NOT NULL,
-            file_path VARCHAR(255) NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-          )
-        `);
-        console.log('Lessons table created successfully');
-      } catch (error) {
-        console.error('Failed to create lessons table:', error);
-      }
-    } else {
-      // Check lessons table structure
-      const [structure] = await promisePool.query('DESCRIBE lessons');
-      console.log('Lessons table structure:', structure);
-    }
+    // Ensure required tables exist
+    await ensureTablesExist();
     
     return true;
   } catch (error) {
@@ -113,61 +136,11 @@ app.get('/api/db-check', async (req, res) => {
     const tables = tablesCheck.map(row => Object.values(row)[0]);
     console.log('Tables in database:', tables);
     
-    const lessonsTableExists = tables.includes('lessons');
+    // Use the utility function to ensure tables exist
+    await ensureTablesExist();
     
-    let lessonsStructure = null;
-    let createLessonsTable = false;
-    
-    if (lessonsTableExists) {
-      // Check lessons table structure
-      const [structure] = await promisePool.query('DESCRIBE lessons');
-      lessonsStructure = structure;
-      console.log('Lessons table structure:', structure);
-      
-      // Check if required columns exist
-      const columns = structure.map(col => col.Field);
-      const requiredColumns = ['course_id', 'week_id', 'day_id', 'lesson_name', 'file_path'];
-      const missingColumns = requiredColumns.filter(col => !columns.includes(col));
-      
-      if (missingColumns.length > 0) {
-        console.log('Missing columns in lessons table:', missingColumns);
-        
-        // Add missing columns
-        for (const column of missingColumns) {
-          let columnType = '';
-          if (['course_id', 'week_id', 'day_id'].includes(column)) {
-            columnType = 'INT NOT NULL';
-          } else {
-            columnType = 'VARCHAR(255) NOT NULL';
-          }
-          
-          await promisePool.query(`ALTER TABLE lessons ADD COLUMN ${column} ${columnType}`);
-          console.log(`Added column ${column} to lessons table`);
-        }
-      }
-    } else {
-      console.log('Lessons table does not exist, creating it...');
-      createLessonsTable = true;
-      
-      // Create lessons table
-      await promisePool.query(`
-        CREATE TABLE lessons (
-          id INT AUTO_INCREMENT PRIMARY KEY,
-          course_id INT NOT NULL,
-          week_id INT NOT NULL,
-          day_id INT NOT NULL,
-          lesson_name VARCHAR(255) NOT NULL,
-          file_path VARCHAR(255) NOT NULL,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-      `);
-      
-      console.log('Lessons table created successfully');
-      
-      // Check the newly created table
-      const [newStructure] = await promisePool.query('DESCRIBE lessons');
-      lessonsStructure = newStructure;
-    }
+    // Get the current structure of the lessons table
+    const [lessonsStructure] = await promisePool.query('DESCRIBE lessons');
     
     // Check related tables
     const relatedTables = ['courses', 'weeks', 'days'];
@@ -188,8 +161,7 @@ app.get('/api/db-check', async (req, res) => {
       databaseConnection: true,
       tables,
       lessons: {
-        exists: lessonsTableExists,
-        created: createLessonsTable,
+        exists: tables.includes('lessons'),
         structure: lessonsStructure
       },
       relatedTables: relatedTablesStatus
@@ -241,7 +213,8 @@ app.post('/api/auth/login', async (req, res) => {
         id: user.id,
         username: user.username,
         email: user.email,
-        surname: user.surname
+        surname: user.surname,
+        role: user.role || 'user' // Add role to the response
       }
     });
   } catch (error) {
@@ -302,8 +275,8 @@ app.post('/api/auth/register', async (req, res) => {
 
     // Insert new user
     const [result] = await promisePool.query(
-      'INSERT INTO users (username, surname, email, password) VALUES (?, ?, ?, ?)',
-      [username, surname, email, hashedPassword]
+      'INSERT INTO users (username, surname, email, password, role) VALUES (?, ?, ?, ?, ?)',
+      [username, surname, email, hashedPassword, 'user'] // Default role is 'user'
     );
 
     console.log('User registered successfully:', { id: result.insertId });
@@ -320,7 +293,8 @@ app.post('/api/auth/register', async (req, res) => {
         id: result.insertId,
         username,
         email,
-        surname
+        surname,
+        role: 'user' // Default role
       }
     });
   } catch (error) {
@@ -431,17 +405,13 @@ app.get('/api/courses', async (req, res) => {
 });
 
 app.get('/api/weeks', async (req, res) => {
-  console.log('connection sucess');
-
   try {
-    
     const [rows] = await promisePool.query(
       'SELECT id, name FROM weeks'
     );
-    console.log('hi');
     res.json(rows); // Send all weeks to the client
   } catch (error) {
-    console.error('Error fetching weeks 2:', error);
+    console.error('Error fetching weeks:', error);
     res.status(500).json({ message: 'Failed to fetch weeks' });
   }
 });
@@ -545,72 +515,8 @@ app.post('/api/lessons', (req, res) => {
     
     let connection;
     try {
-      // First, check if the lessons table exists
-      try {
-        const [tableCheck] = await promisePool.query('SHOW TABLES LIKE "lessons"');
-        if (tableCheck.length === 0) {
-          console.error('ERROR: lessons table does not exist in the database!');
-          
-          // Try to create the lessons table
-          try {
-            console.log('Attempting to create lessons table...');
-            await promisePool.query(`
-              CREATE TABLE IF NOT EXISTS lessons (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                course_id INT NOT NULL,
-                week_id INT NOT NULL,
-                day_id INT NOT NULL,
-                lesson_name VARCHAR(255) NOT NULL,
-                file_path VARCHAR(255) NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-              )
-            `);
-            console.log('Lessons table created successfully');
-          } catch (createError) {
-            console.error('Failed to create lessons table:', createError);
-            return res.status(500).json({ 
-              message: 'Database error', 
-              error: 'Failed to create lessons table',
-              details: createError.message
-            });
-          }
-        } else {
-          console.log('Lessons table exists');
-        }
-        
-        // Check the structure of the lessons table
-        const [tableStructure] = await promisePool.query('DESCRIBE lessons');
-        console.log('Lessons table structure:', tableStructure);
-        
-        // Check if required columns exist
-        const columns = tableStructure.map(col => col.Field);
-        const requiredColumns = ['course_id', 'week_id', 'day_id', 'lesson_name', 'file_path'];
-        const missingColumns = requiredColumns.filter(col => !columns.includes(col));
-        
-        if (missingColumns.length > 0) {
-          console.log('Missing columns in lessons table:', missingColumns);
-          
-          // Add missing columns
-          for (const column of missingColumns) {
-            let columnType = '';
-            if (['course_id', 'week_id', 'day_id'].includes(column)) {
-              columnType = 'INT NOT NULL';
-            } else {
-              columnType = 'VARCHAR(255) NOT NULL';
-            }
-            
-            await promisePool.query(`ALTER TABLE lessons ADD COLUMN ${column} ${columnType}`);
-            console.log(`Added column ${column} to lessons table`);
-          }
-        }
-      } catch (tableError) {
-        console.error('Error checking lessons table:', tableError);
-        return res.status(500).json({ 
-          message: 'Database error', 
-          error: 'Failed to check lessons table structure',
-          details: tableError.message
-        });
-      }
+      // Ensure required tables exist
+      await ensureTablesExist();
       
       // Check if the related tables exist and have data
       try {

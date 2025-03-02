@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { useToast } from "@/components/ui/use-toast";
 import { Input } from "@/components/ui/input";
-import { Upload, Plus } from "lucide-react";
+import { Upload, Plus, Loader2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
@@ -14,6 +14,8 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { api } from "@/server/api"; // Adjust this import to match where your API functions are located
+import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
 
 interface FileWithPreview extends File {
   id: string;
@@ -30,56 +32,41 @@ export default function Admin() {
   const [courses, setCourses] = useState<any[]>([]);
   const [weeks, setWeeks] = useState<any[]>([]);
   const [days, setDays] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { user } = useAuth();
+  const navigate = useNavigate();
 
+  // Fetch all required data in a single useEffect
   useEffect(() => {
-    const fetchCourses = async () => {
+    const fetchData = async () => {
+      setIsLoading(true);
       try {
-        const coursesData = await api.getCourses(); // API call to get courses
+        // Fetch all data in parallel
+        const [coursesData, weeksData, daysData] = await Promise.all([
+          api.getCourses(),
+          api.getWeeks(),
+          api.getDays()
+        ]);
+        
         setCourses(coursesData);
-      } catch (error) {
-        toast({
-          title: "Error",
-          description: "Failed to fetch courses",
-          variant: "destructive",
-        });
-      }
-    };
-    fetchCourses();
-  }, []);
-
-  useEffect(() => {
-    const fetchWeeks = async () => {
-      try {
-        const weeksData = await api.getWeeks(); // API call to get weeks
         setWeeks(weeksData);
-      } catch (error) {
-        toast({
-          title: "Error",
-          description: "Failed to fetch weeks",
-          variant: "destructive",
-        });
-      }
-    };
-    fetchWeeks();
-  }, []);
-
-  useEffect(() => {
-    const fetchDays = async () => {
-      try {
-        const daysData = await api.getDays(); // API call to get days
         setDays(daysData);
       } catch (error) {
+        console.error("Failed to fetch data:", error);
         toast({
           title: "Error",
-          description: "Failed to fetch days",
+          description: "Failed to load required data",
           variant: "destructive",
         });
+      } finally {
+        setIsLoading(false);
       }
     };
-    fetchDays();
-  }, []);
+
+    fetchData();
+  }, [toast]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) {
@@ -92,37 +79,31 @@ export default function Admin() {
     // Store the raw File objects directly
     const selectedFiles = Array.from(e.target.files);
     
-    // Log each file's properties to verify they're valid File objects
-    selectedFiles.forEach((file, index) => {
-      console.log(`Selected file ${index + 1}:`, {
-        name: file.name,
-        type: file.type || 'unknown type',
-        size: file.size,
-        lastModified: file.lastModified,
-        constructor: file.constructor.name
-      });
-    });
-    
-    const validFiles = selectedFiles.filter(file => {
-      // Accept all file types for debugging
-      return true;
-    });
-
     // Create new file objects with IDs for our state management
-    const newFiles = validFiles.map(file => ({
-      ...file,
-      id: `${file.name}-${Date.now()}`,
-      name: file.name,
-    }));
+    const newFiles = selectedFiles.map(file => {
+      // Store the original file object as a property
+      return {
+        ...file,
+        id: `${file.name}-${Date.now()}`,
+        name: file.name,
+        originalFile: file // Store the original File object
+      };
+    });
 
     setFiles(prev => [...prev, ...newFiles]);
 
-    newFiles.forEach(file => {
+    // Show toast for the first file and a summary if multiple
+    if (newFiles.length === 1) {
       toast({
         title: "File Added",
-        description: `Added: ${file.name}`,
+        description: `Added: ${newFiles[0].name}`,
       });
-    });
+    } else {
+      toast({
+        title: "Files Added",
+        description: `Added ${newFiles.length} files`,
+      });
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -137,11 +118,8 @@ export default function Admin() {
       return;
     }
     
-    // Check if we have files in the input element
-    const hasInputFiles = fileInputRef.current && fileInputRef.current.files && fileInputRef.current.files.length > 0;
-    
-    // If no files in input and no files in state, show error
-    if (!hasInputFiles && files.length === 0) {
+    // Check if we have files
+    if (files.length === 0) {
       toast({
         title: "No files selected",
         description: "Please upload at least one file",
@@ -161,71 +139,12 @@ export default function Admin() {
       formData.append('dayId', String(selectedDay));
       formData.append('title', lessonTitle);
       
-      console.log('Form data values:', {
-        courseId: selectedCourse,
-        weekId: selectedWeek,
-        dayId: selectedDay,
-        title: lessonTitle
-      });
-      
-      // IMPORTANT: Use the files directly from the input element if available
-      if (hasInputFiles) {
-        const inputFiles = fileInputRef.current!.files!;
-        console.log(`Adding ${inputFiles.length} files from input element`);
-        
-        for (let i = 0; i < inputFiles.length; i++) {
-          const file = inputFiles[i];
-          console.log(`Adding file ${i+1}/${inputFiles.length}:`, {
-            name: file.name,
-            type: file.type || 'unknown',
-            size: file.size
-          });
-          
-          // Add each file with the field name 'files'
-          formData.append('files', file);
-        }
-      } 
-      // Fallback to files in state if needed
-      else if (files.length > 0) {
-        console.log(`Adding ${files.length} files from state`);
-        
-        for (let i = 0; i < files.length; i++) {
-          const fileObj = files[i];
-          // Fix the type casting to avoid TypeScript errors
-          // FileWithPreview already extends File, so we can use it directly
-          
-          console.log(`Adding file ${i+1}/${files.length}:`, {
-            name: fileObj.name,
-            size: fileObj.size
-          });
-          
-          // Use the file object directly - it's already a File with our custom properties
-          formData.append('files', fileObj as unknown as Blob);
-        }
+      // Add files from state
+      for (const fileObj of files) {
+        // Use the original File object if available, otherwise use the fileObj itself
+        const fileToUpload = (fileObj as any).originalFile || fileObj;
+        formData.append('files', fileToUpload);
       }
-      
-      // Verify FormData contains files
-      let fileCount = 0;
-      for (const [key, value] of formData.entries()) {
-        if (key === 'files') {
-          fileCount++;
-          console.log(`FormData contains file:`, {
-            key,
-            isFile: value instanceof File,
-            name: value instanceof File ? value.name : 'not a file',
-            type: value instanceof File ? value.type : 'unknown',
-            size: value instanceof File ? value.size : 'unknown'
-          });
-        } else {
-          console.log(`FormData field: ${key}=${value}`);
-        }
-      }
-      
-      if (fileCount === 0) {
-        throw new Error('No files were added to the form data');
-      }
-      
-      console.log(`FormData contains ${fileCount} files`);
       
       // Submit the form
       const response = await api.uploadLesson(formData);
@@ -277,6 +196,17 @@ export default function Admin() {
       fileInputRef.current.click();
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="container max-w-4xl mx-auto py-4 flex justify-center items-center min-h-[300px]">
+        <div className="flex flex-col items-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="mt-2 text-gray-500">Loading admin panel...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="container max-w-4xl mx-auto py-4">
