@@ -291,7 +291,26 @@ const api = {
       }
       throw error;
     }
-  }
+  },
+
+  updateLessonTime: async (lessonTitle: string, time: string) => {
+    const response = await fetch('http://localhost:5001/api/update-lesson-time', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        lesson_title: lessonTitle,
+        time: time,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to update lesson time');
+    }
+
+    return response.json();
+  },
 };
 
 export { api };
