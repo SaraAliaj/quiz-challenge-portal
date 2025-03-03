@@ -9,6 +9,7 @@ import {
   Award,
   ChevronDown,
   Check,
+  ChevronLeft,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -74,37 +75,47 @@ export default function Sidebar() {
   };
 
   return (
-    <div className={`h-screen ${collapsed ? 'w-16' : 'w-64'} bg-white border-r flex flex-col transition-width duration-300`}>
-      <div className="p-4">
+    <div className={`h-screen ${collapsed ? 'w-16' : 'w-64'} bg-white border-r flex flex-col transition-all duration-300 ease-in-out relative`}>
+      <div className="p-4 flex items-center justify-between">
         <Link to="/" className="flex items-center space-x-2">
-          <GraduationCap className="h-6 w-6" />
-          {!collapsed && <span className="font-bold text-xl">AI School</span>}
+          <GraduationCap className={`h-6 w-6 ${collapsed ? 'mx-auto' : ''}`} />
+          <span className={`font-bold text-xl transition-opacity duration-300 ${collapsed ? 'opacity-0 w-0' : 'opacity-100'}`}>
+            AI School
+          </span>
         </Link>
+        <button 
+          onClick={toggleSidebar}
+          className={`absolute -right-3 top-6 bg-white border rounded-full p-1.5 hover:bg-gray-100 transition-all duration-300 ${collapsed ? 'rotate-180' : ''}`}
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </button>
       </div>
-      <button className="toggle-btn p-2" onClick={toggleSidebar}>
-        {collapsed ? 'Expand' : 'Collapse'}
-      </button>
-      <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+      
+      <nav className="flex-1 overflow-y-auto px-2">
         <div className="space-y-2">
-          <div className="font-semibold text-sm text-gray-500 uppercase tracking-wider px-2">
-            Curriculum
+          <div className={`font-semibold text-sm text-gray-500 uppercase tracking-wider px-2 ${collapsed ? 'text-center' : ''}`}>
+            {!collapsed && "Curriculum"}
           </div>
           {courses.map((course) => (
             <div key={course.id} className="space-y-1">
               <Button
                 variant="ghost"
-                className="w-full justify-between"
+                className={`w-full ${collapsed ? 'justify-center' : 'justify-between'}`}
                 onClick={() => toggleCourse(course.id)}
               >
                 <div className="flex items-center">
-                  <Book className="mr-2 h-4 w-4" />
-                  {!collapsed && <span>{course.title}</span>}
+                  <Book className={`h-4 w-4 ${collapsed ? '' : 'mr-2'}`} />
+                  <span className={`transition-opacity duration-300 ${collapsed ? 'opacity-0 w-0' : 'opacity-100'}`}>
+                    {course.title}
+                  </span>
                 </div>
-                <ChevronDown
-                  className={`h-4 w-4 transition-transform ${
-                    expandedCourse === course.id ? "transform rotate-180" : ""
-                  }`}
-                />
+                {!collapsed && (
+                  <ChevronDown
+                    className={`h-4 w-4 transition-transform ${
+                      expandedCourse === course.id ? "transform rotate-180" : ""
+                    }`}
+                  />
+                )}
               </Button>
               {expandedCourse === course.id && (
                 <div className="ml-4 space-y-1">
@@ -165,21 +176,27 @@ export default function Sidebar() {
 
         <div className="pt-4 space-y-2">
           <Link to="/challenges">
-            <Button variant="ghost" className="w-full justify-start">
-              <Award className="mr-2 h-4 w-4" />
-              {!collapsed && <span>Challenges</span>}
+            <Button variant="ghost" className={`w-full ${collapsed ? 'justify-center' : 'justify-start'}`}>
+              <Award className={`h-4 w-4 ${collapsed ? '' : 'mr-2'}`} />
+              <span className={`transition-opacity duration-300 ${collapsed ? 'opacity-0 w-0' : 'opacity-100'}`}>
+                Challenges
+              </span>
             </Button>
           </Link>
           <Link to="/quizzes">
-            <Button variant="ghost" className="w-full justify-start">
-              <Trophy className="mr-2 h-4 w-4" />
-              {!collapsed && <span>Weekly Quizzes</span>}
+            <Button variant="ghost" className={`w-full ${collapsed ? 'justify-center' : 'justify-start'}`}>
+              <Trophy className={`h-4 w-4 ${collapsed ? '' : 'mr-2'}`} />
+              <span className={`transition-opacity duration-300 ${collapsed ? 'opacity-0 w-0' : 'opacity-100'}`}>
+                Weekly Quizzes
+              </span>
             </Button>
           </Link>
           <Link to="/chat">
-            <Button variant="ghost" className="w-full justify-start">
-              <MessageCircle className="mr-2 h-4 w-4" />
-              {!collapsed && <span>AI Chat</span>}
+            <Button variant="ghost" className={`w-full ${collapsed ? 'justify-center' : 'justify-start'}`}>
+              <MessageCircle className={`h-4 w-4 ${collapsed ? '' : 'mr-2'}`} />
+              <span className={`transition-opacity duration-300 ${collapsed ? 'opacity-0 w-0' : 'opacity-100'}`}>
+                AI Chat
+              </span>
             </Button>
           </Link>
         </div>

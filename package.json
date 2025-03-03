@@ -11,7 +11,9 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "dev:server": "nodemon server.mjs",
-    "generate-favicon": "tsx scripts/generate-favicon.ts"
+    "generate-favicon": "tsx scripts/generate-favicon.ts",
+    "websocket": "node src/server/websocket.js"
+
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
@@ -69,6 +71,8 @@
     "react-router-dom": "^6.26.2",
     "react-split": "^2.0.14",
     "recharts": "^2.12.7",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1",
     "sonner": "^1.5.0",
     "tailwind-merge": "^2.6.0",
     "tailwindcss-animate": "^1.0.7",
@@ -78,7 +82,7 @@
   "devDependencies": {
     "@eslint/js": "^9.9.0",
     "@tailwindcss/typography": "^0.5.15",
-    "@types/node": "^22.5.5",
+    "@types/node": "^22.13.8",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react-swc": "^3.5.0",
@@ -91,7 +95,8 @@
     "nodemon": "^3.1.9",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.11",
-    "typescript": "^5.5.3",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.2",
     "typescript-eslint": "^8.0.1",
     "vite": "^5.4.1"
   }
