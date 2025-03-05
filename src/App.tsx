@@ -3,7 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
-import { AuthProvider } from '@/contexts/AuthContext';
+import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import LoginForm from "@/components/auth/LoginForm";
 import RegisterForm from "@/components/auth/RegisterForm";
@@ -19,6 +19,17 @@ import GroupChat from "@/pages/GroupChat";
 import Admin from "@/pages/Admin";
 
 const queryClient = new QueryClient();
+
+// Admin route wrapper component
+const AdminRoute = ({ children }) => {
+  const { user } = useAuth();
+  
+  if (!user || user.role !== 'admin') {
+    return <Navigate to="/" replace />;
+  }
+  
+  return children;
+};
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -45,7 +56,14 @@ const App = () => (
               <Route path="challenges" element={<Challenges />} />
               <Route path="quizzes" element={<Quizzes />} />
               <Route path="quiz/:id" element={<QuizContent />} />
-              <Route path="admin" element={<Admin />} />
+              <Route 
+                path="admin" 
+                element={
+                  <AdminRoute>
+                    <Admin />
+                  </AdminRoute>
+                } 
+              />
             </Route>
 
             {/* 404 route */}

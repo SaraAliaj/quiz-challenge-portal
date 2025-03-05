@@ -8,8 +8,18 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import pdfIntegration from './pdf_integration.js';
+import { Server } from 'socket.io';
+import { createServer } from 'http';
 
 const app = express();
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+  cors: {
+    origin: ['http://localhost:8080', 'http://127.0.0.1:8080', 'http://localhost:5173', 'http://127.0.0.1:5173'],
+    methods: ['GET', 'POST'],
+    credentials: true
+  }
+});
 
 // Enable CORS with specific options
 app.use(cors({
@@ -346,6 +356,25 @@ const verifyToken = (req, res, next) => {
     next();
   } catch (error) {
     return res.status(401).json({ message: 'Invalid token' });
+  }
+};
+
+// Middleware to check if user is admin
+const isAdmin = async (req, res, next) => {
+  try {
+    const [user] = await promisePool.query(
+      'SELECT role FROM users WHERE id = ?',
+      [req.user.userId]
+    );
+
+    if (user.length === 0 || user[0].role !== 'admin') {
+      return res.status(403).json({ message: 'Access denied. Admin privileges required.' });
+    }
+
+    next();
+  } catch (error) {
+    console.error('Admin check error:', error);
+    return res.status(500).json({ message: 'Server error during admin check' });
   }
 };
 
@@ -840,34 +869,24 @@ app.get('/api/lessons/:id/download', async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT || 3003;
+// Socket.IO connection handling
+io.on('connection', (socket) => {
+  console.log('A user connected:', socket.id);
 
-// Start server with better error handling
+  socket.on('disconnect', () => {
+    console.log('User disconnected:', socket.id);
+  });
+});
+
+// Update the startServer function to use httpServer instead of app
 const startServer = async () => {
   try {
-    // Ensure uploads directory exists
-    const uploadDir = path.join(process.cwd(), 'uploads');
-    if (!fs.existsSync(uploadDir)) {
-      console.log(`Creating upload directory: ${uploadDir}`);
-      fs.mkdirSync(uploadDir, { recursive: true });
-    } else {
-      console.log(`Upload directory exists: ${uploadDir}`);
-      
-      // Check if directory is writable
-      try {
-        const testFile = `${uploadDir}/test-${Date.now()}.txt`;
-        fs.writeFileSync(testFile, 'test');
-        fs.unlinkSync(testFile);
-        console.log('Upload directory is writable');
-      } catch (error) {
-        console.error('Upload directory is not writable:', error.message);
-      }
-    }
-    
     await connectToDatabase();
+    await ensureTablesExist();
     
-    app.listen(PORT, () => {
-      console.log(`Server running on http://localhost:${PORT}`);
+    const PORT = process.env.PORT || 3000;
+    httpServer.listen(PORT, () => {
+      console.log(`Server is running on port ${PORT}`);
     });
   } catch (error) {
     console.error('Failed to start server:', error);
@@ -875,10 +894,7 @@ const startServer = async () => {
   }
 };
 
-startServer().catch(err => {
-  console.error('Startup error:', err);
-  process.exit(1);
-});
+startServer();
 
 // Error handling
 process.on('unhandledRejection', (error) => {
@@ -888,4 +904,17 @@ process.on('unhandledRejection', (error) => {
 process.on('uncaughtException', (error) => {
   console.error('Uncaught Exception:', error);
   process.exit(1);
+});
+
+// Admin routes
+app.get('/api/admin/users', verifyToken, isAdmin, async (req, res) => {
+  try {
+    const [users] = await promisePool.query(
+      'SELECT id, username, email, role, created_at FROM users'
+    );
+    res.json(users);
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    res.status(500).json({ message: 'Failed to fetch users' });
+  }
 }); 

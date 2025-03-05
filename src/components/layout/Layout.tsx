@@ -165,9 +165,22 @@ export default function Layout() {
 
   // Initialize WebSocket connection
   useEffect(() => {
-    const manager = new Manager(import.meta.env.VITE_API_URL || 'http://localhost:3000');
+    const manager = new Manager(import.meta.env.VITE_API_URL || 'http://localhost:3000', {
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000
+    });
     const socket = manager.socket('/');
     socketRef.current = socket;
+
+    socket.on('connect', () => {
+      console.log('Connected to WebSocket server');
+    });
+
+    socket.on('connect_error', (error) => {
+      console.error('WebSocket connection error:', error);
+    });
 
     socket.on('lessonStarted', (data) => {
       if (data.lessonId !== activeLessonSession?.lessonId) {
@@ -521,10 +534,12 @@ export default function Layout() {
                     Group Chat
                   </NavItem>
                   
-                  {/* Admin link */}
-                  <NavItem to="/admin" icon={Settings} collapsed={isSidebarCollapsed}>
-                    Admin
-                  </NavItem>
+                  {/* Admin link - only show for admin users */}
+                  {user?.role === 'admin' && (
+                    <NavItem to="/admin" icon={Settings} collapsed={isSidebarCollapsed}>
+                      Admin
+                    </NavItem>
+                  )}
                 </div>
               </div>
             </nav>

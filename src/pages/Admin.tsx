@@ -39,6 +39,29 @@ export default function Admin() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
+  // Check admin access on component mount
+  useEffect(() => {
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+
+    if (user.role !== 'admin') {
+      toast({
+        title: "Access Denied",
+        description: "You don't have permission to access the admin panel.",
+        variant: "destructive",
+      });
+      navigate('/');
+      return;
+    }
+  }, [user, navigate, toast]);
+
+  // If user is not admin, don't render the component
+  if (!user || user.role !== 'admin') {
+    return null;
+  }
+
   // Fetch all required data in a single useEffect
   useEffect(() => {
     const fetchData = async () => {
