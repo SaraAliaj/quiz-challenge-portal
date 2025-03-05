@@ -13,7 +13,6 @@
     "dev:server": "nodemon server.mjs",
     "generate-favicon": "tsx scripts/generate-favicon.ts",
     "websocket": "node src/server/websocket.js"
-
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
