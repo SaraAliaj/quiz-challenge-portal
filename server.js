@@ -352,9 +352,14 @@ const verifyToken = (req, res, next) => {
   
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded;
+    // Set the decoded token data directly as req.user
+    req.user = {
+      userId: decoded.userId,
+      email: decoded.email
+    };
     next();
   } catch (error) {
+    console.error('Token verification error:', error);
     return res.status(401).json({ message: 'Invalid token' });
   }
 };
@@ -362,6 +367,10 @@ const verifyToken = (req, res, next) => {
 // Middleware to check if user is admin
 const isAdmin = async (req, res, next) => {
   try {
+    if (!req.user || !req.user.userId) {
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+
     const [user] = await promisePool.query(
       'SELECT role FROM users WHERE id = ?',
       [req.user.userId]
@@ -431,6 +440,31 @@ app.get('/api/courses', async (req, res) => {
   } catch (error) {
     console.error('Error fetching courses:', error);
     res.status(500).json({ message: 'Failed to fetch courses' });
+  }
+});
+
+// Create a new course
+app.post('/api/courses', verifyToken, isAdmin, async (req, res) => {
+  try {
+    const { name } = req.body;
+    
+    if (!name) {
+      return res.status(400).json({ message: 'Course name is required' });
+    }
+
+    const [result] = await promisePool.query(
+      'INSERT INTO courses (name) VALUES (?)',
+      [name]
+    );
+
+    res.status(201).json({
+      id: result.insertId,
+      name,
+      message: 'Course created successfully'
+    });
+  } catch (error) {
+    console.error('Error creating course:', error);
+    res.status(500).json({ message: 'Failed to create course' });
   }
 });
 
@@ -916,5 +950,129 @@ app.get('/api/admin/users', verifyToken, isAdmin, async (req, res) => {
   } catch (error) {
     console.error('Error fetching users:', error);
     res.status(500).json({ message: 'Failed to fetch users' });
+  }
+});
+
+// Get all users
+app.get('/api/admin/students', verifyToken, isAdmin, async (req, res) => {
+  try {
+    console.log('Fetching all users...');
+    
+    // First check if users table exists and has data
+    const [tableCheck] = await promisePool.query('SHOW TABLES LIKE "users"');
+    if (tableCheck.length === 0) {
+      console.error('Users table does not exist!');
+      return res.status(500).json({ message: 'Users table does not exist' });
+    }
+
+    // Check total number of users
+    const [countResult] = await promisePool.query('SELECT COUNT(*) as count FROM users');
+    console.log(`Total users in database: ${countResult[0].count}`);
+
+    // Log the table structure
+    const [tableStructure] = await promisePool.query('DESCRIBE users');
+    console.log('Users table structure:', tableStructure);
+
+    // Get all users with detailed logging
+    const [users] = await promisePool.query(`
+      SELECT 
+        id,
+        username,
+        surname,
+        email,
+        role
+      FROM users 
+      ORDER BY username
+    `);
+
+    console.log('Raw users data:', users);
+    console.log(`Found ${users.length} users`);
+    
+    // Log each user's data
+    users.forEach(user => {
+      console.log('User:', {
+        id: user.id,
+        username: user.username,
+        surname: user.surname,
+        email: user.email,
+        role: user.role
+      });
+    });
+
+    res.json(users);
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    res.status(500).json({ 
+      message: 'Failed to fetch users',
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
+// Update user role to lead_student
+app.put('/api/admin/students/:id/role', verifyToken, isAdmin, async (req, res) => {
+  try {
+    const userId = req.params.id;
+    
+    // First check if the user exists and get their current role
+    const [userCheck] = await promisePool.query(
+      'SELECT role FROM users WHERE id = ?',
+      [userId]
+    );
+
+    if (userCheck.length === 0) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const currentRole = userCheck[0].role;
+    console.log(`Current role for user ${userId}: ${currentRole}`);
+
+    // Update the role to lead_student
+    const [result] = await promisePool.query(
+      'UPDATE users SET role = "lead_student" WHERE id = ?',
+      [userId]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(500).json({ message: 'Failed to update user role' });
+    }
+
+    console.log(`Successfully updated role for user ${userId} from ${currentRole} to lead_student`);
+    res.json({ message: 'User role updated successfully' });
+  } catch (error) {
+    console.error('Error updating user role:', error);
+    res.status(500).json({ 
+      message: 'Failed to update user role',
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
+// Test endpoint to create a test user
+app.post('/api/test/create-user', async (req, res) => {
+  try {
+    // Check if users table exists
+    const [tableCheck] = await promisePool.query('SHOW TABLES LIKE "users"');
+    if (tableCheck.length === 0) {
+      console.error('Users table does not exist!');
+      return res.status(500).json({ message: 'Users table does not exist' });
+    }
+
+    // Create test user
+    const [result] = await promisePool.query(
+      'INSERT INTO users (username, surname, email, password, role) VALUES (?, ?, ?, ?, ?)',
+      ['Test', 'User', 'test@example.com', await bcrypt.hash('password123', 10), 'user']
+    );
+
+    console.log('Test user created successfully:', result.insertId);
+    res.json({ message: 'Test user created successfully', userId: result.insertId });
+  } catch (error) {
+    console.error('Error creating test user:', error);
+    res.status(500).json({ 
+      message: 'Failed to create test user',
+      error: error.message
+    });
   }
 }); 

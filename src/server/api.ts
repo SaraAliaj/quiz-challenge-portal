@@ -96,6 +96,21 @@ const api = {
     }
   },
 
+  createCourse: async (name: string) => {
+    try {
+      const response = await axiosInstance.post('/courses', { name }, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+        }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Failed to create course:', error);
+      throw error;
+    }
+  },
+
   getWeeks: async () => {
     try {
       const response = await axiosInstance.get('/weeks');
@@ -288,6 +303,27 @@ const api = {
           headers: error.response?.headers
         });
       }
+      throw error;
+    }
+  },
+
+  // New methods for student management
+  getStudents: async () => {
+    try {
+      const response = await axiosInstance.get('/admin/students');
+      return response.data;
+    } catch (error) {
+      console.error('Failed to fetch students:', error);
+      throw error;
+    }
+  },
+
+  updateStudentRole: async (userId: string) => {
+    try {
+      const response = await axiosInstance.put(`/admin/students/${userId}/role`);
+      return response.data;
+    } catch (error) {
+      console.error('Failed to update student role:', error);
       throw error;
     }
   },

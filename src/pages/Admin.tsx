@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { useToast } from "@/components/ui/use-toast";
 import { Input } from "@/components/ui/input";
-import { Upload, Plus, Loader2, Clock } from "lucide-react";
+import { Upload, Plus, Loader2, Clock, Users } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
@@ -17,10 +17,35 @@ import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { api } from "@/server/api"; // Adjust this import to match where your API functions are located
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 interface FileWithPreview extends File {
   id: string;
   name: string;
+}
+
+interface Student {
+  id: number;
+  username: string;
+  surname: string;
+  email: string;
+  role: string;
 }
 
 export default function Admin() {
@@ -38,6 +63,13 @@ export default function Admin() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [newCourseName, setNewCourseName] = useState("");
+  const [isCreatingCourse, setIsCreatingCourse] = useState(false);
+  const [showCourseDialog, setShowCourseDialog] = useState(false);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [isLoadingStudents, setIsLoadingStudents] = useState(false);
+  const [showStudentsDialog, setShowStudentsDialog] = useState(false);
+  const [showUploadDialog, setShowUploadDialog] = useState(false);
 
   // Check admin access on component mount
   useEffect(() => {
@@ -206,6 +238,84 @@ export default function Admin() {
     }
   };
 
+  const handleCreateCourse = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!newCourseName.trim()) {
+      toast({
+        title: "Missing information",
+        description: "Please enter a course name",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsCreatingCourse(true);
+    try {
+      const response = await api.createCourse(newCourseName);
+      
+      // Refresh courses list
+      const coursesData = await api.getCourses();
+      setCourses(coursesData);
+      
+      toast({
+        title: "Success",
+        description: `Course "${newCourseName}" created successfully`,
+      });
+
+      // Reset form and close dialog
+      setNewCourseName("");
+      setShowCourseDialog(false);
+    } catch (error: any) {
+      console.error('Course creation error:', error);
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || error.message || "Failed to create course",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCreatingCourse(false);
+    }
+  };
+
+  const handleLoadStudents = async () => {
+    setIsLoadingStudents(true);
+    try {
+      const studentsData = await api.getStudents();
+      setStudents(studentsData);
+    } catch (error: any) {
+      console.error('Failed to load students:', error);
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || error.message || "Failed to load students",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingStudents(false);
+    }
+  };
+
+  const handleUpdateStudentRole = async (userId: number) => {
+    try {
+      await api.updateStudentRole(userId.toString());
+      // Refresh students list
+      const studentsData = await api.getStudents();
+      setStudents(studentsData);
+      
+      toast({
+        title: "Success",
+        description: "Student role updated successfully",
+      });
+    } catch (error: any) {
+      console.error('Failed to update student role:', error);
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || error.message || "Failed to update student role",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="container max-w-4xl mx-auto py-4 flex justify-center items-center min-h-[300px]">
@@ -218,186 +328,264 @@ export default function Admin() {
   }
 
   return (
-    <div className="container max-w-4xl mx-auto py-4">
-      <Card className="shadow-sm">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-2xl">Admin Panel</CardTitle>
+    <div className="container mx-auto p-8 min-h-screen bg-gradient-to-b from-gray-50 to-white">
+      <Card className="p-8 shadow-lg border-t-4 border-t-primary">
+        <CardHeader className="pb-8">
+          <CardTitle className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/70">Admin Panel</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <form onSubmit={handleSubmit}>
-            <div className="grid grid-cols-1 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="course">Select Course</Label>
-                <Select
-                  value={selectedCourse}
-                  onValueChange={setSelectedCourse}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select course">
-                      {selectedCourse && courses.find(course => course.id.toString() === selectedCourse)?.name}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {courses.map(course => (
-                      <SelectItem key={course.id} value={course.id.toString()}>
-                        {course.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="week">Select Week</Label>
-                <Select
-                  value={selectedWeek}
-                  onValueChange={setSelectedWeek}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select week">
-                      {selectedWeek && weeks.find(week => week.id.toString() === selectedWeek)?.name}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {weeks.map(week => (
-                      <SelectItem key={week.id} value={week.id.toString()}>
-                        {week.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="day">Select Day</Label>
-                <Select
-                  value={selectedDay}
-                  onValueChange={setSelectedDay}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select day">
-                      {selectedDay && days.find(day => day.id.toString() === selectedDay)?.name || 
-                       selectedDay && days.find(day => day.id.toString() === selectedDay)?.day_name || 
-                       "Select day"}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {days.length > 0 ? days.map(day => (
-                      <SelectItem key={day.id} value={day.id.toString()}>
-                        {day.name || day.day_name || `Day ${day.id}`}
-                      </SelectItem>
-                    )) : (
-                      <div className="p-2 text-sm text-gray-500">No days available</div>
-                    )}
-                  </SelectContent>
-                </Select>
-                
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="title">Lesson Title</Label>
-                <Input
-                  id="title"
-                  value={lessonTitle}
-                  onChange={(e) => setLessonTitle(e.target.value)}
-                  placeholder="Enter lesson title"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="files">Upload Files</Label>
-                <div className="flex flex-col gap-2">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    onChange={handleFileSelect}
-                    className="hidden"
-                    id="file-upload"
-                  />
-                  <div className="flex items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={addMoreFiles}
-                      disabled={isSubmitting}
-                      className="flex items-center"
-                    >
-                      <Upload className="mr-2 h-4 w-4" /> Select Files
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 my-8">
+            <Dialog open={showCourseDialog} onOpenChange={setShowCourseDialog}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="w-full h-48 relative group p-6 border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg">
+                  <div className="absolute inset-0 bg-gradient-to-r from-blue-50 to-indigo-50 opacity-0 group-hover:opacity-100 transition-opacity rounded-md" />
+                  <div className="relative flex flex-col items-center justify-center gap-4">
+                    <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-full flex items-center justify-center transform group-hover:scale-110 transition-transform">
+                      <Plus className="w-8 h-8 text-white" />
+                    </div>
+                    <span className="text-xl font-medium">Add Course</span>
+                    <p className="text-sm text-gray-500 text-center">Create a new course </p>
+                  </div>
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Add New Course</DialogTitle>
+                  <DialogDescription>
+                    Enter the name for the new course.
+                  </DialogDescription>
+                </DialogHeader>
+                <form onSubmit={handleCreateCourse}>
+                  <div className="grid gap-4 py-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="courseName">Course Name</Label>
+                      <Input
+                        id="courseName"
+                        value={newCourseName}
+                        onChange={(e) => setNewCourseName(e.target.value)}
+                        placeholder="Enter course name"
+                        disabled={isCreatingCourse}
+                      />
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button type="submit" disabled={isCreatingCourse}>
+                      {isCreatingCourse ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Creating...
+                        </>
+                      ) : (
+                        "Create Course"
+                      )}
                     </Button>
-                    <span className="text-sm text-gray-500">
-                      {files.length === 0 
-                        ? "No files selected" 
-                        : `${files.length} file${files.length > 1 ? 's' : ''} selected`}
-                    </span>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+
+            <Dialog open={showUploadDialog} onOpenChange={setShowUploadDialog}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="w-full h-48 relative group p-6 border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg">
+                  <div className="absolute inset-0 bg-gradient-to-r from-purple-50 to-pink-50 opacity-0 group-hover:opacity-100 transition-opacity rounded-md" />
+                  <div className="relative flex flex-col items-center justify-center gap-4">
+                    <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center transform group-hover:scale-110 transition-transform">
+                      <Upload className="w-8 h-8 text-white" />
+                    </div>
+                    <span className="text-xl font-medium">Upload Lesson</span>
+                    <p className="text-sm text-gray-500 text-center">Add new lesson materials</p>
                   </div>
-                  <div className="text-xs text-gray-500 mt-1">
-                    Files will be uploaded when you submit the form. Make sure to select files before submitting.
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>Upload Lesson</DialogTitle>
+                  <DialogDescription>
+                    Fill in the details and upload lesson materials.
+                  </DialogDescription>
+                </DialogHeader>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="course">Course</Label>
+                      <Select value={selectedCourse} onValueChange={setSelectedCourse}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select course" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {courses.map((course) => (
+                            <SelectItem key={course.id} value={String(course.id)}>
+                              {course.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="week">Week</Label>
+                      <Select value={selectedWeek} onValueChange={setSelectedWeek}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select week" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {weeks.map((week) => (
+                            <SelectItem key={week.id} value={String(week.id)}>
+                              {week.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="day">Day</Label>
+                      <Select value={selectedDay} onValueChange={setSelectedDay}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select day" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {days.map((day) => (
+                            <SelectItem key={day.id} value={String(day.id)}>
+                              {day.day_name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="title">Lesson Title</Label>
+                      <Input
+                        id="title"
+                        value={lessonTitle}
+                        onChange={(e) => setLessonTitle(e.target.value)}
+                        placeholder="Enter lesson title"
+                      />
+                    </div>
                   </div>
-                </div>
-              </div>
-              {files.length > 0 && (
-                <div className="border rounded-md p-3 bg-gray-50">
-                  <Label className="mb-2 block">Selected Files:</Label>
-                  <ScrollArea className="max-h-60">
-                    <ul className="space-y-2">
-                      {files.map(file => (
-                        <li key={file.id} className="flex items-center justify-between py-2 px-3 bg-white rounded border">
-                          <div className="flex items-center">
-                            <div className="mr-2">
-                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                                <polyline points="14 2 14 8 20 8"></polyline>
-                                <line x1="16" y1="13" x2="8" y2="13"></line>
-                                <line x1="16" y1="17" x2="8" y2="17"></line>
-                                <polyline points="10 9 9 9 8 9"></polyline>
-                              </svg>
+
+                  <div className="space-y-2">
+                    <Label>Upload Files</Label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleFileSelect}
+                        className="hidden"
+                        multiple
+                      />
+                      <Button type="button" variant="outline" onClick={addMoreFiles}>
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add Files
+                      </Button>
+                    </div>
+                    {files.length > 0 && (
+                      <ScrollArea className="h-[100px] w-full border rounded-md p-2">
+                        <div className="space-y-2">
+                          {files.map((file) => (
+                            <div
+                              key={file.id}
+                              className="flex items-center justify-between"
+                            >
+                              <span className="text-sm">{file.name}</span>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => removeFile(file.id)}
+                              >
+                                Remove
+                              </Button>
                             </div>
-                            <span className="text-sm">{file.name}</span>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => removeFile(file.id)}
-                            className="h-8 w-8 p-0"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <line x1="18" y1="6" x2="6" y2="18"></line>
-                              <line x1="6" y1="6" x2="18" y2="18"></line>
-                            </svg>
-                            <span className="sr-only">Remove</span>
-                          </Button>
-                        </li>
-                      ))}
-                    </ul>
-                  </ScrollArea>
-                </div>
-              )}
-              <Button 
-                type="submit" 
-                disabled={isSubmitting}
-                className="w-full mt-4"
-              >
-                {isSubmitting ? (
-                  <>
-                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Uploading Lesson...
-                  </>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    )}
+                  </div>
+
+                  <DialogFooter>
+                    <Button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="w-full sm:w-auto"
+                    >
+                      {isSubmitting && (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      )}
+                      {isSubmitting ? "Uploading..." : "Upload Lesson"}
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+
+            <Dialog open={showStudentsDialog} onOpenChange={setShowStudentsDialog}>
+              <DialogTrigger asChild>
+                <Button variant="outline" className="w-full h-48 relative group p-6 border-2 hover:border-primary/50 transition-all duration-300 hover:shadow-lg" onClick={handleLoadStudents}>
+                  <div className="absolute inset-0 bg-gradient-to-r from-emerald-50 to-teal-50 opacity-0 group-hover:opacity-100 transition-opacity rounded-md" />
+                  <div className="relative flex flex-col items-center justify-center gap-4">
+                    <div className="w-16 h-16 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-full flex items-center justify-center transform group-hover:scale-110 transition-transform">
+                      <Users className="w-8 h-8 text-white" />
+                    </div>
+                    <span className="text-xl font-medium">Lead Student</span>
+                    <p className="text-sm text-gray-500 text-center">Manage student roles</p>
+                  </div>
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-3xl">
+                <DialogHeader>
+                  <DialogTitle>Manage Lead Students</DialogTitle>
+                  <DialogDescription>
+                    Select a student to make them a lead student.
+                  </DialogDescription>
+                </DialogHeader>
+                {isLoadingStudents ? (
+                  <div className="flex justify-center items-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin" />
+                  </div>
+                ) : students.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    No students found
+                  </div>
                 ) : (
-                  <>
-                    <Upload className="mr-2 h-5 w-5" />
-                    Upload Lesson
-                  </>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Surname</TableHead>
+                        <TableHead>Role</TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {students
+                        .filter(student => student.role !== 'admin')
+                        .map((student) => (
+                          <TableRow key={student.id}>
+                            <TableCell>{student.username}</TableCell>
+                            <TableCell>{student.surname}</TableCell>
+                            <TableCell>
+                              {student.role === 'lead_student' ? 'Lead Student' : 'Student'}
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleUpdateStudentRole(student.id)}
+                                disabled={student.role === 'lead_student'}
+                              >
+                                Make Lead
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                    </TableBody>
+                  </Table>
                 )}
-              </Button>
-              
-              {isSubmitting && (
-                <div className="mt-4 p-3 bg-blue-50 text-blue-700 rounded-md text-sm">
-                  <p className="font-medium">Uploading lesson...</p>
-                  <p className="mt-1">This may take a moment depending on the file size. Please don't close this page.</p>
-                </div>
-              )}
-            </div>
-          </form>
+              </DialogContent>
+            </Dialog>
+          </div>
         </CardContent>
       </Card>
     </div>
