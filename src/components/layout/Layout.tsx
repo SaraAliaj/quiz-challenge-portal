@@ -536,8 +536,13 @@ export default function Layout() {
       <Dialog open={showDurationDialog} onOpenChange={setShowDurationDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>
-              {user?.role === 'lead_student' ? 'Select Lesson Duration' : 'Waiting for Lead Student'}
+            <DialogTitle className={cn(
+              "text-xl",
+              user?.role === 'lead_student' 
+                ? "text-amber-800"
+                : "text-amber-800"
+            )}>
+              {user?.role === 'lead_student' ? 'Select Lesson Duration' : '👑 Waiting for Lead Student'}
             </DialogTitle>
           </DialogHeader>
           {user?.role === 'lead_student' ? (
@@ -574,7 +579,7 @@ export default function Layout() {
                 <Button
                   onClick={startLesson}
                   disabled={!selectedDuration}
-                  className="bg-green-600 hover:bg-green-700"
+                  className="bg-primary text-white hover:bg-primary/90"
                 >
                   Start Lesson
                 </Button>
@@ -583,13 +588,15 @@ export default function Layout() {
           ) : (
             <div className="p-4 space-y-4">
               <div className="text-center">
-                <div className="mb-4">
-                  <Clock className="h-12 w-12 mx-auto text-gray-400" />
+                <div className="relative w-16 h-16 mx-auto mb-4">
+                  <div className="absolute inset-0 rounded-full border-4 border-amber-100"></div>
+                  <div className="absolute inset-0 rounded-full border-4 border-amber-500 border-t-transparent animate-spin"></div>
+                  <Clock className="h-8 w-8 absolute inset-0 m-auto text-amber-600" />
                 </div>
-                <p className="text-lg font-semibold text-gray-700">
+                <p className="text-lg font-semibold text-amber-800">
                   Waiting for Lead Student
                 </p>
-                <p className="text-sm text-gray-500 mt-2">
+                <p className="text-sm text-amber-600 mt-2">
                   Only the lead student can start this lesson. Please wait for them to begin.
                 </p>
               </div>
@@ -600,6 +607,7 @@ export default function Layout() {
                     setSelectedLessonToStart(null);
                   }}
                   variant="outline"
+                  className="border-amber-200 text-amber-800 hover:bg-amber-50"
                 >
                   Close
                 </Button>
