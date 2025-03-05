@@ -15,7 +15,9 @@ import {
   Settings,
   ChevronLeft,
   Play,
-  Square
+  Square,
+  Clock,
+  Crown
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -25,7 +27,7 @@ import {
 } from "@/components/ui/collapsible";
 import LessonChatbot from "@/components/LessonChatbot";
 import { api } from "@/server/api";
-import { io, Socket } from "socket.io-client";
+import { Manager } from "socket.io-client";
 import {
   Dialog,
   DialogContent,
@@ -64,8 +66,17 @@ interface Course {
   weeks: Week[];
 }
 
-// Update the notification dialog
-const NotificationDialog = ({ type, data, onOpenChange, open }) => (
+interface NotificationDialogProps {
+  type: 'start' | 'end';
+  data: {
+    lessonName: string;
+    duration?: number;
+  };
+  onOpenChange: (open: boolean) => void;
+  open: boolean;
+}
+
+const NotificationDialog = ({ type, data, onOpenChange, open }: NotificationDialogProps) => (
   <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent className={cn(
       "border-2",
@@ -114,7 +125,7 @@ export default function Layout() {
     lessonId: string;
     startTime: Date;
   } | null>(null);
-  const socketRef = useRef<Socket | null>(null);
+  const socketRef = useRef<any>(null); // Using any temporarily for socket type
   const [showNotification, setShowNotification] = useState(false);
   const [notificationData, setNotificationData] = useState<{
     lessonName: string;
@@ -154,9 +165,11 @@ export default function Layout() {
 
   // Initialize WebSocket connection
   useEffect(() => {
-    socketRef.current = io('http://localhost:3001');
+    const manager = new Manager(import.meta.env.VITE_API_URL || 'http://localhost:3000');
+    const socket = manager.socket('/');
+    socketRef.current = socket;
 
-    socketRef.current.on('lessonStarted', (data) => {
+    socket.on('lessonStarted', (data) => {
       if (data.lessonId !== activeLessonSession?.lessonId) {
         setNotificationData({
           lessonName: data.lessonName,
@@ -172,7 +185,7 @@ export default function Layout() {
       }
     });
 
-    socketRef.current.on('lessonEnded', (data) => {
+    socket.on('lessonEnded', (data) => {
       setEndNotificationData({
         lessonName: data.lessonName,
       });
@@ -183,7 +196,7 @@ export default function Layout() {
     });
 
     return () => {
-      socketRef.current?.disconnect();
+      socket.disconnect();
     };
   }, [activeLessonSession, activeLesson]);
 
@@ -225,13 +238,11 @@ export default function Layout() {
     navigate('/login');
   };
 
-  const handleLessonClick = (lessonId: string, lessonName: string) => {
-    // If lesson is active, show content
-    if (activeLessonSession?.lessonId === lessonId) {
-      setActiveLesson({id: lessonId, name: lessonName});
+  const handleLessonClick = (lesson: Lesson) => {
+    if (activeLessonSession) {
+      navigate(`/lesson/${lesson.id}`);
     } else {
-      // If lesson isn't active, show duration dialog
-      setSelectedLessonToStart({id: lessonId, name: lessonName});
+      setSelectedLessonToStart({ id: lesson.id, name: lesson.name });
       setShowDurationDialog(true);
     }
   };
@@ -244,58 +255,49 @@ export default function Layout() {
   };
 
   const startLesson = () => {
-    if (!selectedLessonToStart || !selectedDuration) return;
+    if (!selectedLessonToStart || !selectedDuration || !user) return;
 
-    const durationInMinutes = parseInt(selectedDuration);
-    
-    if (socketRef.current) {
-      socketRef.current.emit('startLesson', {
-        lessonId: selectedLessonToStart.id,
-        lessonName: selectedLessonToStart.name,
-        teacherName: 'Teacher',
-        duration: durationInMinutes
+    if (user.role !== 'lead_student') {
+      toast({
+        title: "Permission Denied",
+        description: "Only lead students can start lessons.",
+        variant: "destructive",
       });
-
-      setActiveLessonSession({
-        lessonId: selectedLessonToStart.id,
-        startTime: new Date(),
-      });
-
-      // Set timer to end lesson
-      const timer = setTimeout(() => {
-        // Show timer expiration notification
-        setEndNotificationData({
-          lessonName: selectedLessonToStart.name,
-        });
-        setShowEndNotification(true);
-        endLesson(selectedLessonToStart.id, selectedLessonToStart.name);
-      }, durationInMinutes * 60 * 1000);
-
-      setLessonEndTimer(timer);
-      setActiveLesson({id: selectedLessonToStart.id, name: selectedLessonToStart.name});
+      return;
     }
+
+    const duration = parseInt(selectedDuration);
+    socketRef.current?.emit('startLesson', {
+      lessonId: selectedLessonToStart.id,
+      duration,
+      teacherName: user.username,
+    });
+
+    // Set active lesson and session
+    setActiveLesson(selectedLessonToStart);
+    setActiveLessonSession({
+      lessonId: selectedLessonToStart.id,
+      startTime: new Date(),
+    });
 
     setShowDurationDialog(false);
     setSelectedDuration("");
     setSelectedLessonToStart(null);
-  };
 
-  const endLesson = (lessonId: string, lessonName: string) => {
-    if (socketRef.current) {
-      socketRef.current.emit('endLesson', {
-        lessonId,
-        lessonName,
-        teacherName: 'Teacher'
+    // Set a timer to end the lesson
+    const timer = setTimeout(() => {
+      socketRef.current?.emit('endLesson', {
+        lessonId: selectedLessonToStart.id,
       });
-      
+      setEndNotificationData({
+        lessonName: selectedLessonToStart.name,
+      });
+      setShowEndNotification(true);
       setActiveLessonSession(null);
       setActiveLesson(null);
-      
-      if (lessonEndTimer) {
-        clearTimeout(lessonEndTimer);
-        setLessonEndTimer(null);
-      }
-    }
+    }, duration * 60 * 1000);
+
+    setLessonEndTimer(timer);
   };
 
   // Function to format duration
@@ -317,7 +319,7 @@ export default function Layout() {
           "flex items-center justify-between px-3 py-2 text-sm text-gray-600 hover:bg-gray-200 rounded-lg cursor-pointer",
           isActive && "bg-green-50"
         )}
-        onClick={() => handleLessonClick(lesson.id, lesson.name)}
+        onClick={() => handleLessonClick(lesson)}
       >
         <div className="flex items-center gap-2">
           <span className="font-medium">{lesson.name}</span>
@@ -333,6 +335,26 @@ export default function Layout() {
       </div>
     );
   };
+
+  const renderUserInfo = () => (
+    <div className="transition-opacity duration-300">
+      <div className="font-medium text-sm leading-tight">{user?.username}</div>
+      <div className="text-xs text-gray-500 truncate">{user?.email}</div>
+      <div className={cn(
+        "mt-1 text-xs inline-flex items-center px-2 py-1 rounded-full font-medium",
+        user?.role === 'lead_student' 
+          ? "bg-gradient-to-r from-amber-200 to-yellow-400 text-amber-900 border border-amber-300 shadow-sm" 
+          : user?.role === 'admin'
+          ? "bg-purple-100 text-purple-800"
+          : "bg-gray-100 text-gray-800"
+      )}>
+        {user?.role === 'lead_student' && (
+          <Crown className="w-3 h-3 mr-1 text-amber-700" />
+        )}
+        {user?.role}
+      </div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-background">
@@ -373,14 +395,7 @@ export default function Layout() {
                   <div className="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center font-bold flex-shrink-0">
                     {user.username ? user.username.charAt(0).toUpperCase() : '?'}
                   </div>
-                  {!isSidebarCollapsed && (
-                    <div className="transition-opacity duration-300">
-                      <div className="font-medium text-sm leading-tight">{user.username} {user.surname}</div>
-                      <div className="text-xs text-gray-500 truncate">
-                        {user.email}
-                      </div>
-                    </div>
-                  )}
+                  {!isSidebarCollapsed && renderUserInfo()}
                 </div>
               ) : (
                 <div className={`flex items-center ${isSidebarCollapsed ? '' : 'gap-3'}`}>
@@ -521,45 +536,76 @@ export default function Layout() {
       <Dialog open={showDurationDialog} onOpenChange={setShowDurationDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Select Lesson Duration</DialogTitle>
+            <DialogTitle>
+              {user?.role === 'lead_student' ? 'Select Lesson Duration' : 'Waiting for Lead Student'}
+            </DialogTitle>
           </DialogHeader>
-          <div className="p-4 space-y-4">
-            <p className="text-sm text-gray-500">
-              Select how long this lesson will be available:
-            </p>
-            <Select value={selectedDuration} onValueChange={setSelectedDuration}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select duration in minutes" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="1">1 minute</SelectItem>
-                <SelectItem value="5">5 minutes</SelectItem>
-                <SelectItem value="10">10 minutes</SelectItem>
-                <SelectItem value="15">15 minutes</SelectItem>
-                <SelectItem value="20">20 minutes</SelectItem>
-                <SelectItem value="30">30 minutes</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <DialogFooter>
-            <Button
-              onClick={() => {
-                setShowDurationDialog(false);
-                setSelectedDuration("");
-                setSelectedLessonToStart(null);
-              }}
-              variant="outline"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={startLesson}
-              disabled={!selectedDuration}
-              className="bg-green-600 hover:bg-green-700"
-            >
-              Start Lesson
-            </Button>
-          </DialogFooter>
+          {user?.role === 'lead_student' ? (
+            <>
+              <div className="p-4 space-y-4">
+                <p className="text-sm text-gray-500">
+                  As a lead student, you can start the lesson. Select how long this lesson will be available:
+                </p>
+                <Select value={selectedDuration} onValueChange={setSelectedDuration}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select duration in minutes" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">1 minute</SelectItem>
+                    <SelectItem value="5">5 minutes</SelectItem>
+                    <SelectItem value="10">10 minutes</SelectItem>
+                    <SelectItem value="15">15 minutes</SelectItem>
+                    <SelectItem value="20">20 minutes</SelectItem>
+                    <SelectItem value="30">30 minutes</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <DialogFooter>
+                <Button
+                  onClick={() => {
+                    setShowDurationDialog(false);
+                    setSelectedDuration("");
+                    setSelectedLessonToStart(null);
+                  }}
+                  variant="outline"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={startLesson}
+                  disabled={!selectedDuration}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  Start Lesson
+                </Button>
+              </DialogFooter>
+            </>
+          ) : (
+            <div className="p-4 space-y-4">
+              <div className="text-center">
+                <div className="mb-4">
+                  <Clock className="h-12 w-12 mx-auto text-gray-400" />
+                </div>
+                <p className="text-lg font-semibold text-gray-700">
+                  Waiting for Lead Student
+                </p>
+                <p className="text-sm text-gray-500 mt-2">
+                  Only the lead student can start this lesson. Please wait for them to begin.
+                </p>
+              </div>
+              <DialogFooter>
+                <Button
+                  onClick={() => {
+                    setShowDurationDialog(false);
+                    setSelectedLessonToStart(null);
+                  }}
+                  variant="outline"
+                >
+                  Close
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

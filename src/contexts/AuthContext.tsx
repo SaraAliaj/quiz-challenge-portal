@@ -3,11 +3,10 @@ import { api } from '@/server/api';
 import { FullPageLoading } from '@/components/ui/loading';
 
 interface User {
-  id: number;
+  id: string;
   username: string;
-  surname: string; 
   email: string;
-  role?: string;
+  role: 'student' | 'lead_student' | 'admin';
 }
 
 interface AuthContextType {
