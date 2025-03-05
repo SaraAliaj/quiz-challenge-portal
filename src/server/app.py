@@ -14,22 +14,6 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
-def parse_time(time_str: str) -> datetime:
-    """Parse time string in HH:MM:SS format to datetime object"""
-    try:
-        # Get current date
-        current_date = datetime.now().date()
-        # Parse time and combine with current date
-        parsed_time = datetime.strptime(time_str, '%H:%M:%S').time()
-        return datetime.combine(current_date, parsed_time)
-    except ValueError:
-        try:
-            # Try without seconds
-            parsed_time = datetime.strptime(time_str, '%H:%M').time()
-            return datetime.combine(current_date, parsed_time)
-        except ValueError:
-            raise ValueError("Invalid time format. Expected HH:MM:SS or HH:MM")
-
 # API Key (Ensure this is kept secure and not exposed in production)
 XAI_API_KEY = os.getenv('XAI_API_KEY', 'xai-r8VBOp32VgNscplC8ULSgM0EPAxXNgGylcpPIR55XNtwbYrVzZJs4daEgPHE3eCaAKrIcbUErODnU1mX')
 
@@ -126,50 +110,6 @@ def chat():
         return jsonify({
             'error': str(e)
         }), 500
-
-@app.route('/api/update-lesson-time', methods=['POST'])
-def update_lesson_time():
-    try:
-        data = request.json
-        lesson_title = data.get('lesson_title')
-        time_str = data.get('time')
-        
-        if not lesson_title or not time_str:
-            return jsonify({'error': 'Missing lesson_title or time'}), 400
-            
-        try:
-            # Parse and validate the time
-            lesson_datetime = parse_time(time_str)
-            # Format datetime as string for database
-            datetime_for_db = lesson_datetime.strftime('%Y-%m-%d %H:%M:%S')
-            
-            conn = get_db_connection()
-            cursor = conn.cursor()
-            
-            # Update the lesson time in the database
-            cursor.execute("""
-                UPDATE lessons 
-                SET lesson_time = ? 
-                WHERE title = ?
-            """, (datetime_for_db, lesson_title))
-            
-            if cursor.rowcount == 0:
-                return jsonify({'error': 'Lesson not found'}), 404
-                
-            conn.commit()
-            conn.close()
-            
-            return jsonify({
-                'message': 'Lesson time updated successfully',
-                'lesson_title': lesson_title,
-                'time': datetime_for_db
-            })
-            
-        except ValueError as ve:
-            return jsonify({'error': str(ve)}), 400
-            
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(port=5001, debug=True) 

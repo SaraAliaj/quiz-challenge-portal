@@ -181,7 +181,6 @@ const api = {
         course.weeks.get(weekId).lessons.push({
           id: lesson.id.toString(),
           name: `${lesson.day_name}: ${lesson.title}`,
-          time: "09:00 AM" // Default time
         });
       });
 

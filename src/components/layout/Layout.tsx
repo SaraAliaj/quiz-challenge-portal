@@ -10,7 +10,6 @@ import {
   CheckSquare,
   ChevronDown,
   MessageSquare,
-  Clock,
   Brain,
   Users,
   Settings,
@@ -92,7 +91,6 @@ const NotificationDialog = ({ type, data, onOpenChange, open }) => (
         <p className="text-xl font-bold mt-2">{data?.lessonName}</p>
         {type === "start" && (
           <p className="text-sm text-gray-600 mt-2 flex items-center gap-2">
-            <Clock className="h-4 w-4" />
             Duration: {data?.duration} minutes
           </p>
         )}
@@ -330,7 +328,6 @@ export default function Layout() {
           )}
         </div>
         <div className="flex items-center gap-2">
-          <Clock className="h-3 w-3" />
           <span className="text-xs">{lesson.time}</span>
         </div>
       </div>

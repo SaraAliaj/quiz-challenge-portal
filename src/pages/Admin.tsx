@@ -38,9 +38,6 @@ export default function Admin() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [selectedHour, setSelectedHour] = useState("09");
-  const [selectedMinute, setSelectedMinute] = useState("00");
-  const [selectedPeriod, setSelectedPeriod] = useState("AM");
 
   // Fetch all required data in a single useEffect
   useEffect(() => {
@@ -111,28 +108,6 @@ export default function Admin() {
     }
   };
 
-  const formatTimeForDatabase = (hour: string, minute: string, period: string): string => {
-    // Convert hour to number, ensuring it's treated as a number
-    let hours = parseInt(hour, 10);
-    
-    // Convert to 24-hour format
-    if (period === 'PM' && hours !== 12) {
-      hours += 12;
-    } else if (period === 'AM' && hours === 12) {
-      hours = 0;
-    }
-
-    // Ensure proper formatting with leading zeros
-    const formattedHours = hours.toString().padStart(2, '0');
-    const formattedMinutes = minute.padStart(2, '0');
-
-    // Get current date in YYYY-MM-DD format
-    const currentDate = new Date().toISOString().split('T')[0];
-
-    // Combine date and time with seconds
-    return `${currentDate} ${formattedHours}:${formattedMinutes}:00`;
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -145,9 +120,6 @@ export default function Admin() {
       return;
     }
 
-    // Format time using the new function
-    const formattedTime = formatTimeForDatabase(selectedHour, selectedMinute, selectedPeriod);
-
     setIsSubmitting(true);
     try {
       const formData = new FormData();
@@ -156,7 +128,6 @@ export default function Admin() {
       formData.append('weekId', String(selectedWeek));
       formData.append('dayId', String(selectedDay));
       formData.append('title', lessonTitle);
-      formData.append('lesson_time', formattedTime);
       
       for (const fileObj of files) {
         const fileToUpload = (fileObj as any).originalFile || fileObj;
@@ -176,9 +147,6 @@ export default function Admin() {
       setSelectedWeek("");
       setSelectedDay("");
       setLessonTitle("");
-      setSelectedHour("09");
-      setSelectedMinute("00");
-      setSelectedPeriod("AM");
       setFiles([]);
       
       if (fileInputRef.current) {
@@ -307,63 +275,6 @@ export default function Admin() {
                       onChange={(e) => setLessonTitle(e.target.value)}
                       placeholder="Enter lesson title"
                     />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="flex items-center gap-2">
-                      <Clock className="h-4 w-4" />
-                      Lesson Time
-                    </Label>
-                    <div className="flex items-center gap-2">
-                      <Select
-                        value={selectedHour}
-                        onValueChange={setSelectedHour}
-                      >
-                        <SelectTrigger className="w-[80px]">
-                          <SelectValue placeholder="Hour" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Array.from({ length: 12 }, (_, i) => {
-                            const hour = (i + 1).toString().padStart(2, '0');
-                            return (
-                              <SelectItem key={hour} value={hour}>
-                                {hour}
-                              </SelectItem>
-                            );
-                          })}
-                        </SelectContent>
-                      </Select>
-                      <span>:</span>
-                      <Select
-                        value={selectedMinute}
-                        onValueChange={setSelectedMinute}
-                      >
-                        <SelectTrigger className="w-[80px]">
-                          <SelectValue placeholder="Min" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Array.from({ length: 60 }, (_, i) => {
-                            const minute = i.toString().padStart(2, '0');
-                            return (
-                              <SelectItem key={minute} value={minute}>
-                                {minute}
-                              </SelectItem>
-                            );
-                          })}
-                        </SelectContent>
-                      </Select>
-                      <Select
-                        value={selectedPeriod}
-                        onValueChange={setSelectedPeriod}
-                      >
-                        <SelectTrigger className="w-[80px]">
-                          <SelectValue placeholder="AM/PM" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="AM">AM</SelectItem>
-                          <SelectItem value="PM">PM</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="files">Upload Files</Label>
