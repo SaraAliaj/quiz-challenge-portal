@@ -10,7 +10,6 @@ import {
   CheckSquare,
   ChevronDown,
   MessageSquare,
-  Clock,
   Brain,
   Users,
   Settings,
@@ -92,7 +91,6 @@ const NotificationDialog = ({ type, data, onOpenChange, open }) => (
         <p className="text-xl font-bold mt-2">{data?.lessonName}</p>
         {type === "start" && (
           <p className="text-sm text-gray-600 mt-2 flex items-center gap-2">
-            <Clock className="h-4 w-4" />
             Duration: {data?.duration} minutes
           </p>
         )}
@@ -330,7 +328,6 @@ export default function Layout() {
           )}
         </div>
         <div className="flex items-center gap-2">
-          <Clock className="h-3 w-3" />
           <span className="text-xs">{lesson.time}</span>
         </div>
       </div>
@@ -341,32 +338,67 @@ export default function Layout() {
     <div className="min-h-screen bg-background">
       <div className="flex">
         {/* Sidebar */}
-        <div className={`${isSidebarCollapsed ? 'w-20' : 'w-72'} min-h-screen bg-gray-100 border-r transition-all duration-300 relative`}>
-          {/* Toggle Button */}
+        <div className={`${isSidebarCollapsed ? 'w-20' : 'w-72'} h-screen bg-gray-100 border-r transition-all duration-300 relative flex flex-col `}>
+          {/* Toggle Button - Positioned at the edge between sidebar and content */}
           <button 
             onClick={toggleSidebar}
-            className={`absolute -right-3 top-6 bg-white border rounded-full p-1.5 hover:bg-gray-100 transition-all duration-300 z-50 ${isSidebarCollapsed ? 'rotate-180' : ''}`}
-          >
-            <ChevronLeft className="h-4 w-4" />
+            className={`absolute -right-4 buttom-2 bg-white border border-gray-200 shadow-md rounded-full p-2 hover:bg-gray-100 transition-all duration-300 z-50 ${isSidebarCollapsed ? 'rotate-180' :  ''}`}
+            >
+            <ChevronLeft className="h-5 w-5 text-primary" />
           </button>
 
-          <div className="flex flex-col h-full">
+          {/* Top Section - Fixed */}
+          <div className="flex-shrink-0">
             {/* Header */}
-            <div className={`p-6 border-b transition-all duration-300 ${isSidebarCollapsed ? 'p-4' : ''}`}>
-              <div className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-2'}`}>
-                <Brain className="h-6 w-6 text-primary" />
-                <h1 className={`text-2xl font-bold text-primary transition-opacity duration-300 ${isSidebarCollapsed ? 'hidden' : 'block'}`}>
-                  AI School
-                </h1>
+            <div className={`p-5 border-b transition-all duration-300 ${isSidebarCollapsed ? 'p-3' : ''}`}>
+              <div className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-3'}`}>
+                <div className="w-12 h-12 flex-shrink-0 flex items-center justify-center">
+                  <Brain className="h-10 w-10 text-primary" />
+                </div>
+                <div className={`transition-opacity duration-300 ${isSidebarCollapsed ? 'hidden' : 'block'}`}>
+                  <h1 className="text-2xl font-bold text-primary leading-tight">
+                    AI School
+                  </h1>
+                  <p className="text-xs text-muted-foreground italic">
+                    Learn. Challenge. Grow.
+                  </p>
+                </div>
               </div>
-              <p className={`text-sm text-muted-foreground mt-2 italic transition-opacity duration-300 ${isSidebarCollapsed ? 'hidden' : 'block'}`}>
-                Learn. Challenge. Grow.
-              </p>
             </div>
             
-            {/* Navigation */}
-            <nav className={`flex-1 overflow-y-auto ${isSidebarCollapsed ? 'p-2' : 'p-4'}`}>
-              <div className="space-y-6">
+            {/* User Profile */}
+            <div className={`p-5 border-b transition-all duration-300 ${isSidebarCollapsed ? 'p-3 flex justify-center' : ''}`}>
+              {user ? (
+                <div className={`flex items-center ${isSidebarCollapsed ? '' : 'gap-3'}`}>
+                  <div className="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center font-bold flex-shrink-0">
+                    {user.username ? user.username.charAt(0).toUpperCase() : '?'}
+                  </div>
+                  {!isSidebarCollapsed && (
+                    <div className="transition-opacity duration-300">
+                      <div className="font-medium text-sm leading-tight">{user.username} {user.surname}</div>
+                      <div className="text-xs text-gray-500 truncate">
+                        {user.email}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className={`flex items-center ${isSidebarCollapsed ? '' : 'gap-3'}`}>
+                  <div className="w-10 h-10 rounded-full bg-gray-300 text-gray-600 flex items-center justify-center font-bold flex-shrink-0">
+                    ?
+                  </div>
+                  {!isSidebarCollapsed && (
+                    <div className="text-sm text-gray-500">Not logged in</div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+            
+          {/* Middle Section - Scrollable with fixed height */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <nav className="flex-1 overflow-y-auto">
+              <div className={`space-y-4 ${isSidebarCollapsed ? 'p-2' : 'p-3'}`}>
                 {/* AI Chat */}
                 <NavItem to="/chat" icon={MessageSquare} collapsed={isSidebarCollapsed}>
                   AI Chat
@@ -374,8 +406,8 @@ export default function Layout() {
 
                 {/* Curriculum Dropdown - Only show when expanded */}
                 {!isSidebarCollapsed && (
-                  <Collapsible open={isCurriculumOpen} onOpenChange={setIsCurriculumOpen}>
-                    <CollapsibleTrigger className="flex w-full items-center justify-between px-4 py-3 text-gray-900 transition-all hover:bg-gray-200 font-bold text-base rounded-lg">
+                  <Collapsible open={isCurriculumOpen} onOpenChange={setIsCurriculumOpen} className="flex-shrink-0">
+                    <CollapsibleTrigger className="flex w-full items-center justify-between px-4 py-2 text-gray-900 transition-all hover:bg-gray-200 font-bold text-base rounded-lg">
                       <div className="flex items-center space-x-3">
                         <BookOpen className="h-5 w-5" />
                         <span>Curriculum</span>
@@ -436,25 +468,27 @@ export default function Layout() {
                 )}
 
                 {/* Other navigation items */}
-                <NavItem to="/challenges" icon={Code} collapsed={isSidebarCollapsed}>
-                  Challenges
-                </NavItem>
-                <NavItem to="/quizzes" icon={CheckSquare} collapsed={isSidebarCollapsed}>
-                  Quizzes
-                </NavItem>
-                <NavItem to="/group-chat" icon={Users} collapsed={isSidebarCollapsed}>
-                  Group Chat
-                </NavItem>
-                
-                {/* Always show Admin link, regardless of user role */}
-                <NavItem to="/admin" icon={Settings} collapsed={isSidebarCollapsed}>
-                  Admin
-                </NavItem>
+                <div className="space-y-4">
+                  <NavItem to="/challenges" icon={Code} collapsed={isSidebarCollapsed}>
+                    Challenges
+                  </NavItem>
+                  <NavItem to="/quizzes" icon={CheckSquare} collapsed={isSidebarCollapsed}>
+                    Quizzes
+                  </NavItem>
+                  <NavItem to="/group-chat" icon={Users} collapsed={isSidebarCollapsed}>
+                    Group Chat
+                  </NavItem>
+                  
+                  {/* Admin link */}
+                  <NavItem to="/admin" icon={Settings} collapsed={isSidebarCollapsed}>
+                    Admin
+                  </NavItem>
+                </div>
               </div>
             </nav>
-
-            {/* Sign Out Button */}
-            <div className={`p-4 border-t ${isSidebarCollapsed ? 'p-2' : ''}`}>
+            
+            {/* Sign Out Button - Fixed at bottom */}
+            <div className={`p-3 border-t mt-auto flex-shrink-0 ${isSidebarCollapsed ? 'p-2' : ''}`}>
               <Button 
                 variant="ghost" 
                 className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-2' : 'justify-start'} text-red-600 hover:text-red-700 hover:bg-red-50`}
