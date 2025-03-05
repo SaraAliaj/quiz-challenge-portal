@@ -342,7 +342,7 @@ export default function Layout() {
           {/* Toggle Button - Positioned at the edge between sidebar and content */}
           <button 
             onClick={toggleSidebar}
-            className={`absolute -right-4 top-10 bg-white border border-gray-200 shadow-md rounded-full p-2 hover:bg-gray-100 transition-all duration-300 z-50 ${isSidebarCollapsed ? 'rotate-180' :  ''}`}
+            className={`absolute -right-4 buttom-2 bg-white border border-gray-200 shadow-md rounded-full p-2 hover:bg-gray-100 transition-all duration-300 z-50 ${isSidebarCollapsed ? 'rotate-180' :  ''}`}
             >
             <ChevronLeft className="h-5 w-5 text-primary" />
           </button>
@@ -352,33 +352,39 @@ export default function Layout() {
             {/* Header */}
             <div className={`p-5 border-b transition-all duration-300 ${isSidebarCollapsed ? 'p-3' : ''}`}>
               <div className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-3'}`}>
-                <Brain className="h-8 w-8 text-primary" />
-                <h1 className={`text-2xl font-bold text-primary transition-opacity duration-300 ${isSidebarCollapsed ? 'hidden' : 'block'}`}>
-                  AI School
-                </h1>
+                <div className="w-12 h-12 flex-shrink-0 flex items-center justify-center">
+                  <Brain className="h-10 w-10 text-primary" />
+                </div>
+                <div className={`transition-opacity duration-300 ${isSidebarCollapsed ? 'hidden' : 'block'}`}>
+                  <h1 className="text-2xl font-bold text-primary leading-tight">
+                    AI School
+                  </h1>
+                  <p className="text-xs text-muted-foreground italic">
+                    Learn. Challenge. Grow.
+                  </p>
+                </div>
               </div>
-              <p className={`text-xs text-muted-foreground mt-1 italic transition-opacity duration-300 ${isSidebarCollapsed ? 'hidden' : 'block'}`}>
-                Learn. Challenge. Grow.
-              </p>
             </div>
             
             {/* User Profile */}
-            <div className={`p-3 border-b transition-all duration-300 ${isSidebarCollapsed ? 'p-2 flex justify-center' : ''}`}>
+            <div className={`p-5 border-b transition-all duration-300 ${isSidebarCollapsed ? 'p-3 flex justify-center' : ''}`}>
               {user ? (
-                <div className={`flex items-center ${isSidebarCollapsed ? '' : 'gap-2'}`}>
-                  <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center font-bold flex-shrink-0">
+                <div className={`flex items-center ${isSidebarCollapsed ? '' : 'gap-3'}`}>
+                  <div className="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center font-bold flex-shrink-0">
                     {user.username ? user.username.charAt(0).toUpperCase() : '?'}
                   </div>
                   {!isSidebarCollapsed && (
-                    <div className="overflow-hidden">
-                      <div className="font-medium text-sm">{user.username} {user.surname}</div>
-                      <div className="text-xs text-gray-500 truncate">{user.email}</div>
+                    <div className="transition-opacity duration-300">
+                      <div className="font-medium text-sm leading-tight">{user.username} {user.surname}</div>
+                      <div className="text-xs text-gray-500 truncate">
+                        {user.email}
+                      </div>
                     </div>
                   )}
                 </div>
               ) : (
                 <div className={`flex items-center ${isSidebarCollapsed ? '' : 'gap-3'}`}>
-                  <div className="w-8 h-8 rounded-full bg-gray-300 text-gray-600 flex items-center justify-center font-bold flex-shrink-0">
+                  <div className="w-10 h-10 rounded-full bg-gray-300 text-gray-600 flex items-center justify-center font-bold flex-shrink-0">
                     ?
                   </div>
                   {!isSidebarCollapsed && (
