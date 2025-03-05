@@ -1,11 +1,12 @@
-const { Server } = require('socket.io');
-const { createServer } = require('http');
+import { Server } from 'socket.io';
+import { createServer } from 'http';
 
 const httpServer = createServer();
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000",
-    methods: ["GET", "POST"]
+    origin: ['http://localhost:5173', 'http://localhost:5174', 'http://127.0.0.1:5173', 'http://127.0.0.1:5174'],
+    methods: ["GET", "POST"],
+    credentials: true
   }
 });
 
@@ -16,12 +17,13 @@ io.on('connection', (socket) => {
   console.log('Client connected');
 
   socket.on('startLesson', (data) => {
-    const { lessonId, lessonName, duration } = data;
+    const { lessonId, lessonName, duration, teacherName } = data;
     
     // Store lesson info
     activeLessons.set(lessonId, {
       name: lessonName,
       duration,
+      teacherName,
       startTime: new Date(),
       timer: setTimeout(() => {
         // Automatically end lesson when time is up
@@ -30,8 +32,14 @@ io.on('connection', (socket) => {
       }, duration * 60 * 1000)
     });
 
-    // Broadcast to all clients except sender
-    socket.broadcast.emit('lessonStarted', data);
+    // Emit to all clients including sender
+    io.emit('lessonStarted', {
+      lessonId,
+      lessonName,
+      duration,
+      teacherName,
+      timestamp: new Date()
+    });
     console.log('Lesson started:', data);
   });
 
@@ -45,8 +53,11 @@ io.on('connection', (socket) => {
       activeLessons.delete(lessonId);
     }
 
-    // Broadcast to all clients
-    io.emit('lessonEnded', data);
+    // Emit to all clients
+    io.emit('lessonEnded', {
+      lessonId,
+      lessonName: lessonData?.name || data.lessonName
+    });
     console.log('Lesson ended:', data);
   });
 

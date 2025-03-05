@@ -165,21 +165,35 @@ export default function Layout() {
 
   // Initialize WebSocket connection
   useEffect(() => {
-    const manager = new Manager(import.meta.env.VITE_API_URL || 'http://localhost:3000', {
+    const manager = new Manager('http://localhost:3001', {
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000
     });
+    
     const socket = manager.socket('/');
     socketRef.current = socket;
 
     socket.on('connect', () => {
       console.log('Connected to WebSocket server');
+      // Register user when connected
+      if (user) {
+        socket.emit('registerUser', {
+          userId: user.id,
+          username: user.username,
+          role: user.role
+        });
+      }
     });
 
     socket.on('connect_error', (error) => {
       console.error('WebSocket connection error:', error);
+      toast({
+        title: "Connection Error",
+        description: "Failed to connect to lesson server. Please refresh the page.",
+        variant: "destructive",
+      });
     });
 
     socket.on('lessonStarted', (data) => {
@@ -190,11 +204,18 @@ export default function Layout() {
           duration: data.duration
         });
         setShowNotification(true);
+        
+        // Show toast notification
         toast({
           title: "Lesson Started",
-          description: `Lesson "${data.lessonName}" has started and will last ${data.duration} minutes`,
+          description: `${data.teacherName} started lesson "${data.lessonName}" (${data.duration} minutes)`,
           className: "bg-green-50 border-green-500 border text-green-700",
         });
+
+        // If user is not in the lesson page, show a more prominent notification
+        if (!window.location.pathname.includes(`/lesson/${data.lessonId}`)) {
+          setActiveLesson({ id: data.lessonId, name: data.lessonName });
+        }
       }
     });
 
@@ -205,13 +226,14 @@ export default function Layout() {
       setShowEndNotification(true);
       if (data.lessonId === activeLesson?.id) {
         setActiveLesson(null);
+        setActiveLessonSession(null);
       }
     });
 
     return () => {
       socket.disconnect();
     };
-  }, [activeLessonSession, activeLesson]);
+  }, [activeLessonSession, activeLesson, user]);
 
   // Clean up timer on unmount
   useEffect(() => {
