@@ -336,25 +336,52 @@ export default function Layout() {
     );
   };
 
-  const renderUserInfo = () => (
-    <div className="transition-opacity duration-300">
-      <div className="font-medium text-sm leading-tight">{user?.username}</div>
-      <div className="text-xs text-gray-500 truncate">{user?.email}</div>
-      <div className={cn(
-        "mt-1 text-xs inline-flex items-center px-2 py-1 rounded-full font-medium",
-        user?.role === 'lead_student' 
-          ? "bg-gradient-to-r from-amber-200 to-yellow-400 text-amber-900 border border-amber-300 shadow-sm" 
-          : user?.role === 'admin'
-          ? "bg-purple-100 text-purple-800"
-          : "bg-gray-100 text-gray-800"
-      )}>
-        {user?.role === 'lead_student' && (
-          <Crown className="w-3 h-3 mr-1 text-amber-700" />
-        )}
-        {user?.role}
+  const renderUserInfo = () => {
+    const getRoleDisplay = () => {
+      switch (user?.role) {
+        case 'lead_student':
+          return {
+            label: 'Lead Student',
+            className: "bg-gradient-to-r from-amber-200 to-yellow-400 text-amber-900 border border-amber-300 shadow-sm",
+            icon: <Crown className="w-3 h-3 mr-1 text-amber-700" />
+          };
+        case 'admin':
+          return {
+            label: 'Administrator',
+            className: "bg-purple-100 text-purple-800",
+            icon: <Settings className="w-3 h-3 mr-1 text-purple-700" />
+          };
+        case 'student':
+          return {
+            label: 'Student',
+            className: "bg-blue-100 text-blue-800",
+            icon: <BookOpen className="w-3 h-3 mr-1 text-blue-700" />
+          };
+        default:
+          return {
+            label: user?.role || 'User',
+            className: "bg-gray-100 text-gray-800",
+            icon: null
+          };
+      }
+    };
+
+    const roleInfo = getRoleDisplay();
+
+    return (
+      <div className="transition-opacity duration-300">
+        <div className="font-medium text-sm leading-tight">{user?.username}</div>
+        <div className="text-xs text-gray-500 truncate">{user?.email}</div>
+        <div className={cn(
+          "mt-1 text-xs inline-flex items-center px-2 py-1 rounded-full font-medium",
+          roleInfo.className
+        )}>
+          {roleInfo.icon}
+          {roleInfo.label}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -536,36 +563,41 @@ export default function Layout() {
       <Dialog open={showDurationDialog} onOpenChange={setShowDurationDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className={cn(
-              "text-xl",
-              user?.role === 'lead_student' 
-                ? "text-amber-800"
-                : "text-amber-800"
-            )}>
+            <DialogTitle className="text-xl text-amber-900">
               {user?.role === 'lead_student' ? 'Select Lesson Duration' : '👑 Waiting for Lead Student'}
             </DialogTitle>
           </DialogHeader>
           {user?.role === 'lead_student' ? (
             <>
               <div className="p-4 space-y-4">
-                <p className="text-sm text-gray-500">
-                  As a lead student, you can start the lesson. Select how long this lesson will be available:
-                </p>
-                <Select value={selectedDuration} onValueChange={setSelectedDuration}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select duration in minutes" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">1 minute</SelectItem>
-                    <SelectItem value="5">5 minutes</SelectItem>
-                    <SelectItem value="10">10 minutes</SelectItem>
-                    <SelectItem value="15">15 minutes</SelectItem>
-                    <SelectItem value="20">20 minutes</SelectItem>
-                    <SelectItem value="30">30 minutes</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="bg-white p-4 rounded-lg border border-amber-200/50 shadow-sm">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="p-2 rounded-full bg-amber-50">
+                      <Crown className="h-5 w-5 text-amber-700" />
+                    </div>
+                    <p className="text-base text-amber-900 font-medium">
+                      Lead Student Controls
+                    </p>
+                  </div>
+                  <p className="text-sm text-amber-800/80 mb-4">
+                    As the lead student, you have the authority to manage this lesson's duration. Choose wisely!
+                  </p>
+                  <Select value={selectedDuration} onValueChange={setSelectedDuration}>
+                    <SelectTrigger className="border-amber-100 bg-white text-amber-900 hover:border-amber-200 transition-colors">
+                      <SelectValue placeholder="Select duration in minutes" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">1 minute</SelectItem>
+                      <SelectItem value="5">5 minutes</SelectItem>
+                      <SelectItem value="10">10 minutes</SelectItem>
+                      <SelectItem value="15">15 minutes</SelectItem>
+                      <SelectItem value="20">20 minutes</SelectItem>
+                      <SelectItem value="30">30 minutes</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-              <DialogFooter>
+              <DialogFooter className="bg-gray-50 px-4 py-3 border-t border-gray-100">
                 <Button
                   onClick={() => {
                     setShowDurationDialog(false);
@@ -573,13 +605,14 @@ export default function Layout() {
                     setSelectedLessonToStart(null);
                   }}
                   variant="outline"
+                  className="border-gray-200 text-gray-700 hover:bg-gray-50"
                 >
                   Cancel
                 </Button>
                 <Button
                   onClick={startLesson}
                   disabled={!selectedDuration}
-                  className="bg-primary text-white hover:bg-primary/90"
+                  className="bg-amber-600 text-white hover:bg-amber-700 shadow-sm transition-colors"
                 >
                   Start Lesson
                 </Button>
@@ -589,14 +622,14 @@ export default function Layout() {
             <div className="p-4 space-y-4">
               <div className="text-center">
                 <div className="relative w-16 h-16 mx-auto mb-4">
-                  <div className="absolute inset-0 rounded-full border-4 border-amber-100"></div>
-                  <div className="absolute inset-0 rounded-full border-4 border-amber-500 border-t-transparent animate-spin"></div>
-                  <Clock className="h-8 w-8 absolute inset-0 m-auto text-amber-600" />
+                  <div className="absolute inset-0 rounded-full border-4 border-gray-100"></div>
+                  <div className="absolute inset-0 rounded-full border-4 border-amber-500/30 border-t-transparent animate-spin"></div>
+                  <Clock className="h-8 w-8 absolute inset-0 m-auto text-amber-700/70" />
                 </div>
-                <p className="text-lg font-semibold text-amber-800">
+                <p className="text-lg font-semibold text-amber-900">
                   Waiting for Lead Student
                 </p>
-                <p className="text-sm text-amber-600 mt-2">
+                <p className="text-sm text-amber-800/70 mt-2">
                   Only the lead student can start this lesson. Please wait for them to begin.
                 </p>
               </div>
@@ -607,7 +640,7 @@ export default function Layout() {
                     setSelectedLessonToStart(null);
                   }}
                   variant="outline"
-                  className="border-amber-200 text-amber-800 hover:bg-amber-50"
+                  className="border-gray-200 text-gray-700 hover:bg-gray-50"
                 >
                   Close
                 </Button>
