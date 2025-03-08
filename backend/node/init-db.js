@@ -1,5 +1,13 @@
-const mysql = require('mysql2');
-require('dotenv').config();
+import mysql from 'mysql2';
+import dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+import { join } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+dotenv.config({ path: join(__dirname, '.env') });
 
 const connection = mysql.createConnection({
   host: process.env.DB_HOST || 'localhost',
@@ -35,7 +43,10 @@ connection.connect((err) => {
           username VARCHAR(255) NOT NULL,
           surname VARCHAR(255),
           email VARCHAR(255) NOT NULL UNIQUE,
-          password VARCHAR(255) NOT NULL
+          password VARCHAR(255) NOT NULL,
+          role VARCHAR(50) DEFAULT 'user',
+          active BOOLEAN DEFAULT FALSE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
       `;
 

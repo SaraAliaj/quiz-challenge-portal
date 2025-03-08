@@ -44,31 +44,115 @@ app.use(cors({
 // Parse JSON bodies
 app.use(express.json());
 
+// JWT Secret
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+
 // Create a connection pool
 const pool = mysql.createPool({
   host: process.env.DB_HOST || 'localhost',
-  user: process.env.DB_USER || 'Sara',
-  password: process.env.DB_PASSWORD || 'Sara0330!!',
+  user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASSWORD || 'password',
   database: process.env.DB_NAME || 'aischool',
   waitForConnections: true,
   connectionLimit: 10,
-  queueLimit: 0,
-  enableKeepAlive: true,
-  keepAliveInitialDelay: 0
+  queueLimit: 0
 });
 
-// Create a promise-based wrapper for the pool
+// Convert pool to use promises
 const promisePool = pool.promise();
+
+// Test database connection
+const testConnection = async () => {
+  try {
+    await promisePool.query('SELECT 1');
+    console.log('Database connection successful');
+    return true;
+  } catch (error) {
+    console.error('Database connection error:', error);
+    return false;
+  }
+};
+
+// Function to ensure all required tables exist
+const ensureTablesExist = async () => {
+  try {
+    // Create users table if it doesn't exist
+    await promisePool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        username VARCHAR(255) NOT NULL,
+        surname VARCHAR(255),
+        email VARCHAR(255) NOT NULL UNIQUE,
+        password VARCHAR(255) NOT NULL,
+        role ENUM('user', 'lead_student', 'admin') DEFAULT 'user',
+        active BOOLEAN DEFAULT FALSE,
+        last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.log('Users table initialized');
+
+    // Create courses table if it doesn't exist
+    await promisePool.query(`
+      CREATE TABLE IF NOT EXISTS courses (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.log('Courses table initialized');
+
+    // Create weeks table if it doesn't exist
+    await promisePool.query(`
+      CREATE TABLE IF NOT EXISTS weeks (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.log('Weeks table initialized');
+
+    // Create days table if it doesn't exist
+    await promisePool.query(`
+      CREATE TABLE IF NOT EXISTS days (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        day_name VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.log('Days table initialized');
+
+    // Create lessons table if it doesn't exist
+    await promisePool.query(`
+      CREATE TABLE IF NOT EXISTS lessons (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        course_id INT NOT NULL,
+        week_id INT NOT NULL,
+        day_id INT NOT NULL,
+        lesson_name VARCHAR(255) NOT NULL,
+        file_path TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (course_id) REFERENCES courses(id),
+        FOREIGN KEY (week_id) REFERENCES weeks(id),
+        FOREIGN KEY (day_id) REFERENCES days(id)
+      )
+    `);
+    console.log('Lessons table initialized');
+
+    return true;
+  } catch (error) {
+    console.error('Error ensuring tables exist:', error);
+    throw error;
+  }
+};
 
 console.log('Database configuration:', {
   host: process.env.DB_HOST || 'localhost',
-  user: process.env.DB_USER || 'Sara',
+  user: process.env.DB_USER || 'root',
   database: process.env.DB_NAME || 'aischool',
   hasPassword: !!process.env.DB_PASSWORD,
   connectionLimit: 10
 });
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
 // Function to initialize database
 const initializeDatabase = async () => {

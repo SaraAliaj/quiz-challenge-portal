@@ -11,13 +11,13 @@ export default defineConfig(({ mode, command }) => ({
     strictPort: false, // Allow fallback to next available port
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:3001',
         changeOrigin: true,
         secure: false,
         rewrite: (path) => path
       },
       '/ws': {
-        target: 'ws://localhost:3007',
+        target: 'ws://localhost:3001',
         ws: true,
         changeOrigin: true
       }
