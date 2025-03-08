@@ -33,7 +33,12 @@ axiosInstance.interceptors.response.use(
 
     if (!error.response) {
       console.error('Network error:', error);
-      throw new Error('Network error - please check your connection');
+      // For development, provide more detailed error information
+      if (process.env.NODE_ENV === 'development') {
+        throw new Error(`Network error - please check if the backend server is running. Details: ${error.message}`);
+      } else {
+        throw new Error('Network error - please check your connection');
+      }
     }
 
     throw error;
@@ -43,7 +48,9 @@ axiosInstance.interceptors.response.use(
 const api = {
   login: async (email: string, password: string) => {
     try {
+      console.log('Attempting login with:', { email });
       const response = await axiosInstance.post('/auth/login', { email, password });
+      console.log('Login response:', response.data);
       return response.data;
     } catch (error: any) {
       console.error('Login API error:', {
@@ -57,8 +64,9 @@ const api = {
 
   register: async (userData: { username: string, surname: string, email: string, password: string }) => {
     try {
-      console.log('Sending registration request to:', `/auth/register`);
+      console.log('Sending registration request');
       const response = await axiosInstance.post('/auth/register', userData);
+      console.log('Registration response:', response.data);
       return response.data;
     } catch (error: any) {
       console.error('Registration API error:', {
@@ -165,7 +173,11 @@ const api = {
     try {
       // Fetch lessons which include course, week, and day information
       const lessonsResponse = await axiosInstance.get('/lessons');
-      const lessons = lessonsResponse.data;
+      console.log('Raw lessons response:', lessonsResponse);
+      
+      // The response format is { status, message, data }
+      const lessons = lessonsResponse.data.data || [];
+      console.log('Extracted lessons data:', lessons);
 
       // Group lessons by course, week, and day
       const courseMap = new Map();

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Send, Bot, User, FileText, Loader2, BookOpen, MessageSquare, FileIcon, Download, ChevronLeft, ChevronRight } from "lucide-react";
@@ -9,6 +10,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { api } from "@/server/api";
 import { useToast } from "@/components/ui/use-toast";
+import { useAuth } from '@/contexts/AuthContext';
+import { useWebSocket } from '@/contexts/WebSocketContext';
 
 interface Message {
   id: string;
@@ -57,7 +60,7 @@ export default function LessonChatbot({
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
-      content: `Hello! I'm your AI assistant for the "${lessonTitle}" lesson. How can I help you?`,
+      content: `Hello! I'm your AI assistant for the "${lessonTitle}" lesson. I can answer questions about topics covered in this lesson, such as deep learning if it's part of the material. However, I cannot answer questions that are not related to this specific lesson content. How can I help you understand this material better?`,
       sender: 'ai',
       timestamp: new Date()
     }
@@ -76,78 +79,91 @@ export default function LessonChatbot({
 
   // Initialize WebSocket connection
   useEffect(() => {
-    // Create WebSocket connection
-    const ws = new WebSocket('ws://localhost:3007/ws');
-    
-    ws.onopen = () => {
-      console.log('Connected to WebSocket server');
-    };
-    
-    ws.onmessage = (event) => {
-      console.log('Message from server:', event.data);
-      try {
-        // Try to parse the response as JSON
-        const jsonData = JSON.parse(event.data);
-        
-        // Check if there's an error
-        if (jsonData.error) {
-          toast({
-            title: "Error",
-            description: jsonData.error,
-            variant: "destructive",
-          });
-          setIsLoading(false);
-          return;
-        }
-        
-        // Add AI response to messages
-        const aiMessage: Message = {
-          id: Date.now().toString(),
-          content: jsonData.response || event.data,
-          sender: 'ai',
-          timestamp: new Date()
-        };
-        setMessages(prev => [...prev, aiMessage]);
-      } catch (e) {
-        // If not JSON, treat as plain text
-        const aiMessage: Message = {
-          id: Date.now().toString(),
-          content: event.data,
-          sender: 'ai',
-          timestamp: new Date()
-        };
-        setMessages(prev => [...prev, aiMessage]);
-      }
-      setIsLoading(false);
-    };
-    
-    ws.onerror = (error) => {
-      console.error('WebSocket error:', error);
-      toast({
-        title: "Connection Error",
-        description: "Failed to connect to lesson server. Please refresh the page.",
-        variant: "destructive",
-      });
-      setIsLoading(false);
-    };
-    
-    ws.onclose = () => {
-      console.log('WebSocket connection closed');
-      // Try to reconnect after 3 seconds
-      setTimeout(() => {
+    // Function to create and set up WebSocket
+    const setupWebSocket = () => {
+      // Create WebSocket connection
+      const ws = new WebSocket('ws://localhost:8000/ws');
+      
+      ws.onopen = () => {
+        console.log('Connected to WebSocket server');
         toast({
-          title: "Reconnecting",
-          description: "Attempting to reconnect to the server...",
+          title: "Connected",
+          description: "Connected to the AI assistant.",
+          variant: "default",
         });
-        // The component will re-render and the useEffect will run again
-      }, 3000);
+      };
+      
+      ws.onmessage = (event) => {
+        console.log('Message from server:', event.data);
+        try {
+          // Try to parse the response as JSON
+          const jsonData = JSON.parse(event.data);
+          
+          // Check if there's an error
+          if (jsonData.error) {
+            toast({
+              title: "Error",
+              description: jsonData.error,
+              variant: "destructive",
+            });
+            setIsLoading(false);
+            return;
+          }
+          
+          // Add AI response to messages
+          const aiMessage: Message = {
+            id: Date.now().toString(),
+            content: jsonData.response || jsonData.message || event.data,
+            sender: 'ai',
+            timestamp: new Date()
+          };
+          setMessages(prev => [...prev, aiMessage]);
+        } catch (e) {
+          // If not JSON, treat as plain text
+          const aiMessage: Message = {
+            id: Date.now().toString(),
+            content: event.data,
+            sender: 'ai',
+            timestamp: new Date()
+          };
+          setMessages(prev => [...prev, aiMessage]);
+        }
+        setIsLoading(false);
+      };
+      
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        toast({
+          title: "Connection Error",
+          description: "Failed to connect to lesson server. Will try to reconnect...",
+          variant: "destructive",
+        });
+        setIsLoading(false);
+      };
+      
+      ws.onclose = () => {
+        console.log('WebSocket connection closed');
+        // Try to reconnect after 3 seconds
+        setTimeout(() => {
+          toast({
+            title: "Reconnecting",
+            description: "Attempting to reconnect to the server...",
+          });
+          setupWebSocket(); // Recursively try to reconnect
+        }, 3000);
+      };
+      
+      socketRef.current = ws;
     };
     
-    socketRef.current = ws;
+    // Initial setup
+    setupWebSocket();
     
     // Clean up on unmount
     return () => {
-      ws.close();
+      if (socketRef.current) {
+        socketRef.current.close();
+      }
     };
   }, []);
 
@@ -214,6 +230,7 @@ export default function LessonChatbot({
       if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
         // Format: lessonId|question
         socketRef.current.send(`${lessonId}|${input}`);
+        console.log(`Sent message to server: ${lessonId}|${input}`);
       } else {
         throw new Error('WebSocket connection not available');
       }

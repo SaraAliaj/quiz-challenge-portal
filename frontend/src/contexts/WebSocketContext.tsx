@@ -1,6 +1,5 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, ReactNode, useRef } from 'react';
 import { useAuth } from './AuthContext';
-import { io, Socket } from 'socket.io-client';
 import { api } from '@/server/api';
 
 interface ActiveUser {
@@ -13,15 +12,16 @@ interface ActiveUser {
 interface WebSocketContextType {
   activeUsers: ActiveUser[];
   isConnected: boolean;
+  sendMessage: (type: string, data: any) => void;
 }
 
 const WebSocketContext = createContext<WebSocketContextType | null>(null);
 
 export function WebSocketProvider({ children }: { children: ReactNode }) {
-  const [socket, setSocket] = useState<Socket | null>(null);
   const [activeUsers, setActiveUsers] = useState<ActiveUser[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const { user } = useAuth();
+  const webSocketRef = useRef<WebSocket | null>(null);
 
   // Fetch active users from the API
   useEffect(() => {
@@ -47,74 +47,102 @@ export function WebSocketProvider({ children }: { children: ReactNode }) {
     }
 
     // Connect to WebSocket server
-    // Use relative URL for WebSocket connection
-    const socketInstance = io('/', {
-      path: '/socket.io',
-      transports: ['websocket', 'polling'],
-      withCredentials: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-      timeout: 10000
-    });
+    // Use the correct WebSocket URL
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    // Use the backend server port explicitly
+    const wsUrl = `${wsProtocol}//localhost:3001/ws`;
+    console.log('Connecting to WebSocket server at:', wsUrl);
+    const ws = new WebSocket(wsUrl);
+    webSocketRef.current = ws;
 
-    setSocket(socketInstance);
-
-    // Socket event handlers
-    socketInstance.on('connect', () => {
+    // WebSocket event handlers
+    ws.onopen = () => {
       console.log('WebSocket connected');
       setIsConnected(true);
       
       // Authenticate with the server
-      socketInstance.emit('authenticate', user.id);
-    });
+      if (user && user.id) {
+        ws.send(JSON.stringify({
+          type: 'authenticate',
+          userId: user.id
+        }));
+      }
+    };
 
-    socketInstance.on('disconnect', () => {
+    ws.onclose = () => {
       console.log('WebSocket disconnected');
       setIsConnected(false);
-    });
+    };
 
-    socketInstance.on('connect_error', (error) => {
+    ws.onerror = (error) => {
       console.error('WebSocket connection error:', error);
       setIsConnected(false);
-    });
+    };
 
-    socketInstance.on('active_users_update', (users: ActiveUser[]) => {
-      console.log('Active users updated:', users);
-      setActiveUsers(users);
-    });
-
-    socketInstance.on('user_active', (newUser: ActiveUser) => {
-      console.log('User became active:', newUser);
-      setActiveUsers(prev => {
-        // Check if user already exists in the list
-        const exists = prev.some(user => user.id === newUser.id);
-        if (exists) {
-          // Update the existing user
-          return prev.map(user => 
-            user.id === newUser.id ? { ...user, lastActive: newUser.lastActive } : user
-          );
-        } else {
-          // Add the new user
-          return [...prev, newUser];
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        
+        if (data.type === 'user_status_change') {
+          handleUserStatusChange(data);
+        } else if (data.type === 'active_users_update') {
+          console.log('Active users updated:', data.users);
+          setActiveUsers(data.users);
         }
-      });
-    });
+      } catch (error) {
+        console.error('Error parsing WebSocket message:', error);
+      }
+    };
 
-    socketInstance.on('user_inactive', ({ userId }: { userId: string }) => {
-      console.log('User became inactive:', userId);
-      setActiveUsers(prev => prev.filter(user => user.id !== userId));
-    });
+    // Handle user status changes
+    const handleUserStatusChange = (data: { userId: string; active: boolean }) => {
+      if (data.active) {
+        // User became active
+        api.getUserById(data.userId)
+          .then(userData => {
+            setActiveUsers(prev => {
+              // Check if user already exists in the list
+              const exists = prev.some(user => user.id === userData.id);
+              if (exists) {
+                // Update the existing user
+                return prev.map(user => 
+                  user.id === userData.id ? { ...userData, lastActive: new Date() } : user
+                );
+              } else {
+                // Add the new user
+                return [...prev, { ...userData, lastActive: new Date() }];
+              }
+            });
+          })
+          .catch(error => console.error('Error fetching user data:', error));
+      } else {
+        // User became inactive
+        setActiveUsers(prev => prev.filter(user => user.id !== data.userId));
+      }
+    };
 
     // Clean up on unmount
     return () => {
-      if (socketInstance) {
-        socketInstance.disconnect();
+      if (webSocketRef.current) {
+        webSocketRef.current.close();
       }
     };
   }, [user]);
 
+  // Function to send messages through WebSocket
+  const sendMessage = (type: string, data: any) => {
+    if (webSocketRef.current && webSocketRef.current.readyState === WebSocket.OPEN) {
+      webSocketRef.current.send(JSON.stringify({
+        type,
+        ...data
+      }));
+    } else {
+      console.error('WebSocket is not connected');
+    }
+  };
+
   return (
-    <WebSocketContext.Provider value={{ activeUsers, isConnected }}>
+    <WebSocketContext.Provider value={{ activeUsers, isConnected, sendMessage }}>
       {children}
     </WebSocketContext.Provider>
   );

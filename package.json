@@ -4,15 +4,19 @@
   "version": "1.0.0",
   "description": "A comprehensive learning platform with quizzes, challenges, and AI-powered chat assistance",
   "scripts": {
+    "dev": "concurrently \"npm run backend:node\" \"npm run backend:python\" \"npm run frontend:dev\"",
     "frontend:dev": "cd frontend && npm run dev",
     "frontend:build": "cd frontend && npm run build",
     "backend:node": "cd backend/node && npm run dev",
     "backend:python": "cd backend/python && python main.py",
     "init-db": "cd backend/node && npm run init-db",
     "check-db": "cd backend/node && npm run check-db",
+    "create-test-user": "cd backend/node && node create-test-user.js",
+    "test:ws": "node test-websocket.js",
     "start": "concurrently \"npm run backend:node\" \"npm run backend:python\" \"npm run frontend:dev\""
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "ws": "^8.18.1"
   }
 } 

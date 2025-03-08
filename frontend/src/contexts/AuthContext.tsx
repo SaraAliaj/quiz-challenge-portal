@@ -107,19 +107,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string) => {
     try {
       const response = await api.login(email, password);
-      // Ensure user has a role property, default to 'user' if not present
-      if (!response.user.role) {
-        response.user.role = 'user';
+      console.log('Login response in AuthContext:', response);
+      
+      // Extract user and token from the response
+      const userData = response.data?.user || response.user;
+      const token = response.data?.token || response.token;
+      
+      if (!userData || !token) {
+        throw new Error('Invalid response format from server');
       }
-      localStorage.setItem('authToken', response.token);
-      localStorage.setItem('user', JSON.stringify(response.user));
+      
+      // Ensure user has a role property, default to 'user' if not present
+      if (!userData.role) {
+        userData.role = 'user';
+      }
+      
+      localStorage.setItem('authToken', token);
+      localStorage.setItem('user', JSON.stringify(userData));
       setIsAuthenticated(true);
-      setUser(response.user);
+      setUser(userData);
     } catch (error) {
-      console.error('Login failed:', {
-        message: error.message,
-        response: error.response?.data
-      });
+      console.error('Login failed:', error);
       throw error;
     }
   };
@@ -132,14 +140,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }) => {
     try {
       const response = await api.register(userData);
-      // Ensure user has a role property, default to 'user' if not present
-      if (!response.user.role) {
-        response.user.role = 'user';
+      console.log('Registration response in AuthContext:', response);
+      
+      // Extract user and token from the response
+      const registeredUser = response.data?.user || response.user;
+      const token = response.data?.token || response.token;
+      
+      if (!registeredUser || !token) {
+        throw new Error('Invalid response format from server');
       }
-      localStorage.setItem('authToken', response.token);
-      localStorage.setItem('user', JSON.stringify(response.user));
+      
+      // Ensure user has a role property, default to 'user' if not present
+      if (!registeredUser.role) {
+        registeredUser.role = 'user';
+      }
+      
+      localStorage.setItem('authToken', token);
+      localStorage.setItem('user', JSON.stringify(registeredUser));
       setIsAuthenticated(true);
-      setUser(response.user);
+      setUser(registeredUser);
     } catch (error) {
       console.error('Registration failed:', error);
       throw error;

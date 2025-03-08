@@ -1,0 +1,3 @@
+This is a sample lesson content.
+
+It contains multiple paragraphs of text that would normally be part of a lesson.

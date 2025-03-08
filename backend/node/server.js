@@ -8,25 +8,37 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import pdfIntegration from './pdf_integration.js';
-import { Server } from 'socket.io';
+import { WebSocketServer, WebSocket } from 'ws';
 import { createServer } from 'http';
+import rateLimit from 'express-rate-limit';
 
 const app = express();
 const httpServer = createServer(app);
-const io = new Server(httpServer, {
-  cors: {
-    origin: [
-      'http://localhost:5173',
-      'http://localhost:5174',
-      'http://127.0.0.1:5173',
-      'http://127.0.0.1:5174'
-    ],
-    methods: ['GET', 'POST'],
-    credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization']
-  },
-  transports: ['polling', 'websocket']
+
+// Initialize WebSocket server with a specific path
+const wss = new WebSocketServer({ 
+  server: httpServer,
+  path: '/ws'
 });
+
+// Store connected clients
+const clients = new Map();
+
+// At the beginning of the file, check for required environment variables
+if (!process.env.JWT_SECRET) {
+  console.error('Warning: JWT_SECRET is not set. Using a fallback value for development only.');
+  process.env.JWT_SECRET = 'fallback_jwt_secret_for_development_only';
+}
+
+// Validate database connection parameters
+const dbHost = process.env.DB_HOST || 'localhost';
+const dbUser = process.env.DB_USER || 'root';
+const dbPassword = process.env.DB_PASSWORD || '';
+const dbName = process.env.DB_NAME || 'aischool';
+
+if (!process.env.DB_PASSWORD) {
+  console.warn('Warning: DB_PASSWORD is not set. Using empty password for development only.');
+}
 
 // Configure CORS
 app.use(cors({
@@ -44,38 +56,37 @@ app.use(cors({
 // Parse JSON bodies
 app.use(express.json());
 
-// JWT Secret
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
-
-// Create a connection pool
+// Create a connection pool with validated parameters
 const pool = mysql.createPool({
-  host: process.env.DB_HOST || 'localhost',
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || 'password',
-  database: process.env.DB_NAME || 'aischool',
+  host: dbHost,
+  user: dbUser,
+  password: dbPassword,
+  database: dbName,
   waitForConnections: true,
   connectionLimit: 10,
-  queueLimit: 0
+  queueLimit: 0,
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 0
 });
 
-// Convert pool to use promises
+// Create a promise-based wrapper for the pool
 const promisePool = pool.promise();
 
-// Test database connection
-const testConnection = async () => {
-  try {
-    await promisePool.query('SELECT 1');
-    console.log('Database connection successful');
-    return true;
-  } catch (error) {
-    console.error('Database connection error:', error);
-    return false;
-  }
-};
+console.log('Database configuration:', {
+  host: dbHost,
+  user: dbUser,
+  database: dbName,
+  hasPassword: !!dbPassword,
+  connectionLimit: 10
+});
 
-// Function to ensure all required tables exist
-const ensureTablesExist = async () => {
+// Function to initialize database
+const initializeDatabase = async () => {
   try {
+    // Create database if it doesn't exist
+    await promisePool.query(`CREATE DATABASE IF NOT EXISTS ${process.env.DB_NAME || 'aischool'}`);
+    console.log('Database initialized');
+
     // Create users table if it doesn't exist
     await promisePool.query(`
       CREATE TABLE IF NOT EXISTS users (
@@ -126,11 +137,11 @@ const ensureTablesExist = async () => {
     await promisePool.query(`
       CREATE TABLE IF NOT EXISTS lessons (
         id INT AUTO_INCREMENT PRIMARY KEY,
-        course_id INT NOT NULL,
-        week_id INT NOT NULL,
-        day_id INT NOT NULL,
         lesson_name VARCHAR(255) NOT NULL,
-        file_path TEXT,
+        course_id INT,
+        week_id INT,
+        day_id INT,
+        file_path VARCHAR(255),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (course_id) REFERENCES courses(id),
         FOREIGN KEY (week_id) REFERENCES weeks(id),
@@ -138,74 +149,6 @@ const ensureTablesExist = async () => {
       )
     `);
     console.log('Lessons table initialized');
-
-    return true;
-  } catch (error) {
-    console.error('Error ensuring tables exist:', error);
-    throw error;
-  }
-};
-
-console.log('Database configuration:', {
-  host: process.env.DB_HOST || 'localhost',
-  user: process.env.DB_USER || 'root',
-  database: process.env.DB_NAME || 'aischool',
-  hasPassword: !!process.env.DB_PASSWORD,
-  connectionLimit: 10
-});
-
-// Function to initialize database
-const initializeDatabase = async () => {
-  try {
-    // Create database if it doesn't exist
-    await promisePool.query(`CREATE DATABASE IF NOT EXISTS ${process.env.DB_NAME || 'aischool'}`);
-    console.log('Database initialized');
-
-    // Create users table if it doesn't exist
-      await promisePool.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        username VARCHAR(255) NOT NULL,
-        surname VARCHAR(255),
-        email VARCHAR(255) NOT NULL UNIQUE,
-        password VARCHAR(255) NOT NULL,
-        role ENUM('user', 'lead_student', 'admin') DEFAULT 'user',
-        active BOOLEAN DEFAULT FALSE,
-        last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-    console.log('Users table initialized');
-
-    // Create courses table if it doesn't exist
-    await promisePool.query(`
-      CREATE TABLE IF NOT EXISTS courses (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-    console.log('Courses table initialized');
-
-    // Create weeks table if it doesn't exist
-        await promisePool.query(`
-      CREATE TABLE IF NOT EXISTS weeks (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-          )
-        `);
-    console.log('Weeks table initialized');
-
-    // Create days table if it doesn't exist
-    await promisePool.query(`
-      CREATE TABLE IF NOT EXISTS days (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        day_name VARCHAR(255) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-    console.log('Days table initialized');
 
     return true;
   } catch (error) {
@@ -235,6 +178,7 @@ const createTestAdminUser = async () => {
     }
   } catch (error) {
     console.error('Error creating test admin user:', error);
+    throw error; // Ensure the error is thrown to be handled by the caller
   }
 };
 
@@ -263,7 +207,35 @@ const connectToDatabase = async () => {
       sqlMessage: error.sqlMessage,
       stack: error.stack
     });
-    throw error;
+    
+    // Check for specific error types and provide more helpful messages
+    if (error.code === 'ECONNREFUSED') {
+      console.error('Could not connect to MySQL server. Please check if the server is running and the connection details are correct.');
+    } else if (error.code === 'ER_ACCESS_DENIED_ERROR') {
+      console.error('Access denied to MySQL. Please check your username and password.');
+    } else if (error.code === 'ER_BAD_DB_ERROR') {
+      console.error(`Database '${dbName}' does not exist. It will be created automatically.`);
+      // Try to create the database
+      try {
+        const tempPool = mysql.createPool({
+          host: dbHost,
+          user: dbUser,
+          password: dbPassword,
+          waitForConnections: true,
+          connectionLimit: 10,
+          queueLimit: 0,
+        });
+        const tempPromisePool = tempPool.promise();
+        await tempPromisePool.query(`CREATE DATABASE IF NOT EXISTS ${dbName}`);
+        console.log(`Database '${dbName}' created successfully.`);
+        // Try connecting again
+        return connectToDatabase();
+      } catch (createError) {
+        console.error('Failed to create database:', createError);
+      }
+    }
+    
+    throw error; // Ensure the error is thrown to be handled by the caller
   }
 };
 
@@ -306,8 +278,7 @@ app.get('/api/db-check', async (req, res) => {
       }
     }
     
-    res.json({
-      status: 'ok',
+    sendSuccessResponse(res, {
       databaseConnection: true,
       tables,
       lessons: {
@@ -315,217 +286,150 @@ app.get('/api/db-check', async (req, res) => {
         structure: lessonsStructure
       },
       relatedTables: relatedTablesStatus
-    });
+    }, 'Database check completed successfully');
   } catch (error) {
     console.error('Database check error:', error);
-    res.status(500).json({
-      status: 'error',
-      message: 'Database check failed',
-      error: {
-        message: error.message,
-        code: error.code,
-        sqlMessage: error.sqlMessage
-      }
-    });
+    sendErrorResponse(res, 500, 'Database check failed', error);
   }
 });
 
-// Login endpoint
-app.post('/api/auth/login', async (req, res) => {
-  const { email, password } = req.body;
+// Configure rate limiters for sensitive endpoints
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // Limit each IP to 10 login attempts per window
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  message: 'Too many login attempts from this IP, please try again after 15 minutes'
+});
 
+const registrationLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5, // Limit each IP to 5 registration attempts per hour
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Too many accounts created from this IP, please try again after an hour'
+});
+
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Too many requests from this IP, please try again after 15 minutes'
+});
+
+// Apply rate limiting to API routes
+app.use('/api/', apiLimiter);
+
+// User login endpoint
+app.post('/api/auth/login', loginLimiter, async (req, res) => {
   try {
-    console.log('Login attempt for:', email);
-    console.log('Request body:', req.body);
+    const { email, password } = req.body;
     
+    // Validate input
     if (!email || !password) {
-      console.log('Missing credentials:', { email: !!email, password: !!password });
-      return res.status(400).json({ message: 'Email and password are required' });
+      return sendErrorResponse(res, 400, 'Email and password are required');
     }
-
-    // Test database connection before proceeding
-    try {
-      await promisePool.query('SELECT 1');
-      console.log('Database connection successful');
-    } catch (dbError) {
-      console.error('Database connection error:', dbError);
-      return res.status(500).json({ message: 'Database connection error', error: dbError.message });
-    }
-
-    // Query for user
-    const [rows] = await promisePool.query(
+    
+    // Find user by email
+    const [users] = await promisePool.query(
       'SELECT * FROM users WHERE email = ?',
       [email]
     );
-
-    console.log('Query result:', { rowCount: rows.length });
-
-    if (rows.length === 0) {
-      console.log('User not found:', email);
-      return res.status(401).json({ message: 'Invalid credentials' });
+    
+    // Check if user exists
+    if (users.length === 0) {
+      return sendErrorResponse(res, 401, 'Invalid email or password');
     }
-
-    const user = rows[0];
-    const validPassword = await bcrypt.compare(password, user.password);
-
-    console.log('Password validation:', { valid: validPassword });
-
-    if (!validPassword) {
-      console.log('Invalid password for user:', email);
-      return res.status(401).json({ message: 'Invalid credentials' });
+    
+    const user = users[0];
+    
+    // Compare passwords
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      return sendErrorResponse(res, 401, 'Invalid email or password');
     }
-
-    // Update user's active status to true
-    console.log('Setting active status to TRUE for user:', user.id);
-    await promisePool.query(
-      'UPDATE users SET active = TRUE WHERE id = ?',
-      [user.id]
-    );
-
+    
+    // Generate JWT token
     const token = jwt.sign(
-      { userId: user.id, email: user.email },
-      JWT_SECRET,
+      { userId: user.id, role: user.role },
+      process.env.JWT_SECRET || 'fallback_jwt_secret_for_development_only',
       { expiresIn: '24h' }
     );
-
-    // Emit socket event for online status update
-    console.log('Emitting user_status_change event for user:', user.id);
-    io.emit('user_status_change', { 
-      userId: user.id, 
-      username: user.username,
-      surname: user.surname,
-      active: true 
-    });
-
-    res.json({
-      token,
+    
+    // Update user's active status
+    await promisePool.query(
+      'UPDATE users SET active = true, last_active = NOW() WHERE id = ?',
+      [user.id]
+    );
+    
+    // Return user data and token
+    sendSuccessResponse(res, {
       user: {
         id: user.id,
         username: user.username,
-        email: user.email,
         surname: user.surname,
-        role: user.role || 'user',
-        active: true
-      }
-    });
+        email: user.email,
+        role: user.role || 'user'
+      },
+      token
+    }, 'Login successful');
   } catch (error) {
-    console.error('Login error details:', {
-      message: error.message,
-      code: error.code,
-      sqlMessage: error.sqlMessage,
-      stack: error.stack
-    });
-    res.status(500).json({ 
-      message: 'Server error during login',
-      error: error.message,
-      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
-    });
+    console.error('Login error:', error);
+    sendErrorResponse(res, 500, 'Server error during login', error);
   }
 });
 
-// Register endpoint
-app.post('/api/auth/register', async (req, res) => {
-  const { username, surname, email, password } = req.body;
-
-  console.log('Received registration request:', {
-    username,
-    surname,
-    email,
-    hasPassword: !!password
-  });
-
-  // Validate input
-  if (!username || !email || !password) {
-    console.log('Missing required fields:', {
-      username: !username,
-      email: !email,
-      password: !password
-    });
-    return res.status(400).json({ 
-      message: 'Please provide all required fields',
-      missing: {
-        username: !username,
-        email: !email,
-        password: !password
-      }
-    });
-  }
-
+// User registration endpoint
+app.post('/api/auth/register', registrationLimiter, async (req, res) => {
   try {
-    // Check database connection
-    await promisePool.query('SELECT 1');
+    const { username, surname, email, password } = req.body;
     
-    // Log the registration attempt
-    console.log('Registration attempt for:', { username, email });
-
+    // Validate input
+    if (!username || !email || !password) {
+      return sendErrorResponse(res, 400, 'Username, email, and password are required');
+    }
+    
     // Check if email already exists
-    const [existing] = await promisePool.query(
-      'SELECT id FROM users WHERE email = ?',
+    const [existingUsers] = await promisePool.query(
+      'SELECT * FROM users WHERE email = ?',
       [email]
     );
-
-    if (existing.length > 0) {
-      console.log('Email already exists:', email);
-      return res.status(400).json({ message: 'Email already registered' });
+    
+    if (existingUsers.length > 0) {
+      return sendErrorResponse(res, 409, 'Email already in use');
     }
-
+    
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
-    console.log('Password hashed successfully');
-
+    
     // Insert new user
     const [result] = await promisePool.query(
       'INSERT INTO users (username, surname, email, password, role) VALUES (?, ?, ?, ?, ?)',
-      [username, surname, email, hashedPassword, 'user'] // Default role is 'user'
+      [username, surname || '', email, hashedPassword, 'user']
     );
-
-    console.log('User registered successfully:', { id: result.insertId });
-
+    
+    // Generate JWT token
     const token = jwt.sign(
-      { userId: result.insertId, email },
-      JWT_SECRET || 'fallback-secret-key',
+      { userId: result.insertId, role: 'user' },
+      process.env.JWT_SECRET || 'fallback_jwt_secret_for_development_only',
       { expiresIn: '24h' }
     );
-
-    res.status(201).json({
-      token,
+    
+    // Return user data and token
+    sendSuccessResponse(res, {
       user: {
         id: result.insertId,
         username,
+        surname: surname || '',
         email,
-        surname,
-        role: 'user' // Default role
-      }
-    });
+        role: 'user'
+      },
+      token
+    }, 'Registration successful');
   } catch (error) {
-    console.error('Registration error details:', {
-      error: error.message,
-      code: error.code,
-      sqlMessage: error.sqlMessage,
-      stack: error.stack
-    });
-    
-    // Send more specific error messages
-    if (error.code === 'ER_DUP_ENTRY') {
-      res.status(400).json({ message: 'Email already registered' });
-    } else if (error.code === 'ER_NO_SUCH_TABLE') {
-      console.error('Database table not found');
-      res.status(500).json({ 
-        message: 'Database configuration error',
-        details: 'Table not found'
-      });
-    } else if (error.code === 'ECONNREFUSED') {
-      console.error('Database connection failed');
-      res.status(500).json({ 
-        message: 'Database connection error',
-        details: 'Could not connect to database'
-      });
-    } else {
-      res.status(500).json({ 
-        message: 'Server error during registration',
-        details: error.message 
-      });
-    }
+    console.error('Registration error:', error);
+    sendErrorResponse(res, 500, 'Server error during registration', error);
   }
 });
 
@@ -534,22 +438,22 @@ const verifyToken = (req, res, next) => {
   const authHeader = req.headers.authorization;
   
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ message: 'No token provided' });
+    return sendErrorResponse(res, 401, 'No token provided');
   }
   
   const token = authHeader.split(' ')[1];
   
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback_jwt_secret_for_development_only');
     // Set the decoded token data directly as req.user
     req.user = {
       userId: decoded.userId,
-      email: decoded.email
+      role: decoded.role // Make sure to include the role
     };
     next();
   } catch (error) {
     console.error('Token verification error:', error);
-    return res.status(401).json({ message: 'Invalid token' });
+    return sendErrorResponse(res, 401, 'Invalid token', error);
   }
 };
 
@@ -557,7 +461,7 @@ const verifyToken = (req, res, next) => {
 const isAdmin = async (req, res, next) => {
   try {
     if (!req.user || !req.user.userId) {
-      return res.status(401).json({ message: 'User not authenticated' });
+      return sendErrorResponse(res, 401, 'User not authenticated');
     }
 
     const [user] = await promisePool.query(
@@ -566,13 +470,13 @@ const isAdmin = async (req, res, next) => {
     );
 
     if (user.length === 0 || user[0].role !== 'admin') {
-      return res.status(403).json({ message: 'Access denied. Admin privileges required.' });
+      return sendErrorResponse(res, 403, 'Access denied. Admin privileges required.');
     }
 
     next();
   } catch (error) {
     console.error('Admin check error:', error);
-    return res.status(500).json({ message: 'Server error during admin check' });
+    return sendErrorResponse(res, 500, 'Server error during admin check', error);
   }
 };
 
@@ -581,54 +485,72 @@ app.get('/api/auth/verify', verifyToken, (req, res) => {
   res.json({ valid: true, user: req.user });
 });
 
-// Middleware for handling file uploads
+// Configure multer for file uploads
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    const uploadDir = path.join(process.cwd(), 'uploads');
-    // Create directory if it doesn't exist
+    // Use the shared uploads directory
+    const uploadDir = path.join(__dirname, '../../shared/uploads/pdfs');
+    // Ensure the directory exists
     if (!fs.existsSync(uploadDir)) {
-      console.log(`Creating upload directory: ${uploadDir}`);
       fs.mkdirSync(uploadDir, { recursive: true });
-    } else {
-      console.log(`Upload directory exists: ${uploadDir}`);
     }
     cb(null, uploadDir);
   },
   filename: function (req, file, cb) {
-    // Create unique filename with original extension
+    // Generate a unique filename
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const ext = path.extname(file.originalname);
-    const filename = file.fieldname + '-' + uniqueSuffix + ext;
-    console.log(`Generated filename for upload: ${filename}`);
-    cb(null, filename);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
   }
 });
 
-// Configure multer with more detailed logging
 const upload = multer({ 
   storage: storage,
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit
+  },
   fileFilter: function (req, file, cb) {
-    console.log(`Received file in multer:`, {
-      originalname: file.originalname,
-      mimetype: file.mimetype,
-      fieldname: file.fieldname,
-      size: file.size
-    });
-    // Accept all file types for now to debug the issue
+    // Accept only PDF files
+    if (file.mimetype !== 'application/pdf') {
+      return cb(new Error('Only PDF files are allowed'));
+    }
     cb(null, true);
   }
 });
+
+// Helper function for consistent error responses
+const sendErrorResponse = (res, statusCode, message, error = null) => {
+  const response = {
+    status: 'error',
+    message
+  };
+  
+  // Include error details in development mode
+  if (process.env.NODE_ENV !== 'production' && error) {
+    response.error = error.message;
+    response.stack = error.stack;
+  }
+  
+  return res.status(statusCode).json(response);
+};
+
+// Helper function for consistent success responses
+const sendSuccessResponse = (res, data, message = 'Success') => {
+  return res.status(200).json({
+    status: 'success',
+    message,
+    data
+  });
+};
 
 // API endpoints for course management
 // Get all courses
 app.get('/api/courses', async (req, res) => {
   try {
     const [rows] = await promisePool.query('SELECT id, name FROM courses ORDER BY name');
-    res.json(rows);
+    sendSuccessResponse(res, rows, 'Courses retrieved successfully');
   } catch (error) {
     console.error('Error fetching courses:', error);
-    res.status(500).json({ message: 'Failed to fetch courses' });
+    sendErrorResponse(res, 500, 'Failed to fetch courses', error);
   }
 });
 
@@ -638,22 +560,21 @@ app.post('/api/courses', verifyToken, isAdmin, async (req, res) => {
     const { name } = req.body;
     
     if (!name) {
-      return res.status(400).json({ message: 'Course name is required' });
+      return sendErrorResponse(res, 400, 'Course name is required');
     }
-
+    
     const [result] = await promisePool.query(
       'INSERT INTO courses (name) VALUES (?)',
       [name]
     );
-
-    res.status(201).json({
+    
+    sendSuccessResponse(res, {
       id: result.insertId,
-      name,
-      message: 'Course created successfully'
-    });
+      name
+    }, 'Course created successfully');
   } catch (error) {
     console.error('Error creating course:', error);
-    res.status(500).json({ message: 'Failed to create course' });
+    sendErrorResponse(res, 500, 'Failed to create course', error);
   }
 });
 
@@ -662,10 +583,10 @@ app.get('/api/weeks', async (req, res) => {
     const [rows] = await promisePool.query(
       'SELECT id, name FROM weeks'
     );
-    res.json(rows); // Send all weeks to the client
+    sendSuccessResponse(res, rows, 'Weeks retrieved successfully');
   } catch (error) {
     console.error('Error fetching weeks:', error);
-    res.status(500).json({ message: 'Failed to fetch weeks' });
+    sendErrorResponse(res, 500, 'Failed to fetch weeks', error);
   }
 });
 
@@ -673,16 +594,34 @@ app.get('/api/weeks', async (req, res) => {
 app.get('/api/days', async (req, res) => {
   try {
     const [rows] = await promisePool.query('SELECT * FROM days');
-    res.json(rows);
+    sendSuccessResponse(res, rows, 'Days retrieved successfully');
   } catch (error) {
     console.error('Error fetching days:', error);
-    res.status(500).json({ error: 'Failed to fetch days' });
+    sendErrorResponse(res, 500, 'Failed to fetch days', error);
   }
 });
 
 // New endpoint to fetch lessons
 app.get('/api/lessons', async (req, res) => {
   try {
+    console.log('Fetching lessons from database...');
+    
+    // First check if we have any lessons
+    const [countResult] = await promisePool.query('SELECT COUNT(*) as count FROM lessons');
+    console.log('Total lessons in database:', countResult[0].count);
+    
+    // Check if we have courses
+    const [coursesResult] = await promisePool.query('SELECT COUNT(*) as count FROM courses');
+    console.log('Total courses in database:', coursesResult[0].count);
+    
+    // Check if we have weeks
+    const [weeksResult] = await promisePool.query('SELECT COUNT(*) as count FROM weeks');
+    console.log('Total weeks in database:', weeksResult[0].count);
+    
+    // Check if we have days
+    const [daysResult] = await promisePool.query('SELECT COUNT(*) as count FROM days');
+    console.log('Total days in database:', daysResult[0].count);
+    
     const [rows] = await promisePool.query(`
       SELECT l.id, l.lesson_name as title, l.course_id, l.week_id, l.day_id, 
              c.name as course_name, w.name as week_name, d.day_name as day_name
@@ -692,10 +631,16 @@ app.get('/api/lessons', async (req, res) => {
       JOIN days d ON l.day_id = d.id
       ORDER BY c.id, w.id, d.id
     `);
-    res.json(rows);
+    
+    console.log('Lessons retrieved:', rows.length);
+    if (rows.length > 0) {
+      console.log('Sample lesson:', rows[0]);
+    }
+    
+    sendSuccessResponse(res, rows, 'Lessons retrieved successfully');
   } catch (error) {
     console.error('Error fetching lessons:', error);
-    res.status(500).json({ error: 'Failed to fetch lessons' });
+    sendErrorResponse(res, 500, 'Failed to fetch lessons', error);
   }
 });
 
@@ -734,16 +679,16 @@ app.get('/api/lessons/:id/content', async (req, res) => {
     
     // For non-PDF files, return the content as before
     const fileContent = fs.readFileSync(filePath, 'utf8');
-    res.json({
+    sendSuccessResponse(res, {
       id: lesson.id,
       title: lesson.lesson_name,
       content: fileContent,
       fileType: path.extname(filePath).substring(1) || 'txt',
       fileName: path.basename(filePath)
-    });
+    }, 'Lesson content retrieved successfully');
   } catch (error) {
     console.error('Error fetching lesson content:', error);
-    res.status(500).json({ error: 'Failed to fetch lesson content' });
+    sendErrorResponse(res, 500, 'Failed to fetch lesson content', error);
   }
 });
 
@@ -975,16 +920,13 @@ app.post('/api/lessons/pdf', (req, res) => {
   upload.single('pdfFile')(req, res, async function(err) {
     if (err) {
       console.error('Multer error:', err);
-      return res.status(400).json({ message: 'File upload error', error: err.message });
+      return sendErrorResponse(res, 400, 'File upload error', err);
     }
     
     console.log('File received:', req.file);
     if (!req.file) {
       console.error('No file was uploaded');
-      return res.status(400).json({ 
-        message: 'Missing required file', 
-        missingFields: ['pdfFile'] 
-      });
+      return sendErrorResponse(res, 400, 'Missing required file', { missingFields: ['pdfFile'] });
     }
     
     const { courseId, weekId, dayId, title } = req.body;
@@ -998,10 +940,7 @@ app.post('/api/lessons/pdf', (req, res) => {
     
     if (missingFields.length > 0) {
       console.log('Missing required fields:', missingFields);
-      return res.status(400).json({ 
-        message: 'Missing required fields', 
-        missingFields 
-      });
+      return sendErrorResponse(res, 400, 'Missing required fields', { missingFields });
     }
     
     // Convert IDs to integers
@@ -1010,8 +949,7 @@ app.post('/api/lessons/pdf', (req, res) => {
     const dayIdInt = parseInt(dayId, 10);
     
     if (isNaN(courseIdInt) || isNaN(weekIdInt) || isNaN(dayIdInt)) {
-      return res.status(400).json({ 
-        message: 'Invalid ID values', 
+      return sendErrorResponse(res, 400, 'Invalid ID values', {
         details: {
           courseId: isNaN(courseIdInt) ? 'Invalid' : 'Valid',
           weekId: isNaN(weekIdInt) ? 'Invalid' : 'Valid',
@@ -1023,29 +961,16 @@ app.post('/api/lessons/pdf', (req, res) => {
     try {
       // Process the PDF file
       const result = await pdfIntegration.processAndAddLesson(req.file.path, {
+        title,
         courseId: courseIdInt,
         weekId: weekIdInt,
-        dayId: dayIdInt,
-        title
+        dayId: dayIdInt
       });
       
-      if (result.success) {
-        res.status(201).json({ 
-          message: 'PDF lesson processed and uploaded successfully',
-          lessonId: result.lessonId
-        });
-      } else {
-        res.status(500).json({ 
-          message: 'Failed to process PDF lesson',
-          error: result.error
-        });
-      }
+      sendSuccessResponse(res, result, 'Lesson uploaded successfully');
     } catch (error) {
-      console.error('Error processing PDF lesson:', error);
-      res.status(500).json({ 
-        message: 'Failed to process PDF lesson',
-        error: error.message
-      });
+      console.error('Error processing PDF:', error);
+      sendErrorResponse(res, 500, 'Failed to process PDF', error);
     }
   });
 });
@@ -1092,257 +1017,104 @@ app.get('/api/lessons/:id/download', async (req, res) => {
   }
 });
 
-// Socket.io connection handler
-const userSockets = new Map(); // Map to track user's socket connections
-
-io.on('connection', (socket) => {
-  console.log('A user connected:', socket.id);
+// Handle WebSocket connections
+wss.on('connection', (ws) => {
+  console.log('Client connected to WebSocket');
   
-  // Handle authentication
-  socket.on('authenticate', async (userId) => {
+  // Handle messages from clients
+  ws.on('message', (message) => {
     try {
-      // Store the user ID in the socket object for later use
-    socket.userId = userId;
-    console.log(`Socket ${socket.id} authenticated as user ${userId}`);
-    
-    // Add this socket to the user's connections
-    if (!userSockets.has(userId)) {
-      userSockets.set(userId, new Set());
-    }
-    userSockets.get(userId).add(socket.id);
-    
-      // Update user's active status in the database
-      await promisePool.query(
-        'UPDATE users SET active = true, last_active = NOW() WHERE id = ?',
-        [userId]
-      );
+      const data = JSON.parse(message);
       
-      // Get user info for the socket event
-      const [userRows] = await promisePool.query(
-        'SELECT id, username, surname, role FROM users WHERE id = ?',
-        [userId]
-      );
-      
-      if (userRows.length > 0) {
-        const user = userRows[0];
+      // Handle authentication
+      if (data.type === 'authenticate' && data.userId) {
+        // Store the client with their user ID
+        clients.set(data.userId, ws);
+        console.log(`User ${data.userId} authenticated via WebSocket`);
         
-        // Emit event to all clients about the new active user
-        io.emit('user_status_change', {
-          userId: user.id,
-          username: user.username,
-          surname: user.surname,
-          role: user.role,
-          active: true
-        });
-        
-        // Send the current list of active users to the newly connected client
-        const [activeUsers] = await promisePool.query(
-          'SELECT id, username, surname, role, last_active FROM users WHERE active = true'
-        );
-        
-        socket.emit('active_users_update', activeUsers);
-      }
-      
-      // Set up an interval to keep the user's last_active timestamp updated
-    const activityInterval = setInterval(async () => {
-      try {
-          await promisePool.query(
-            'UPDATE users SET last_active = NOW() WHERE id = ?',
-            [socket.userId]
-          );
-      } catch (error) {
-          console.error('Error updating user activity:', error);
-      }
-      }, 60000); // Update every minute
-    
-    // Store the interval ID in the socket for cleanup
-    socket.activityInterval = activityInterval;
-    } catch (error) {
-      console.error('Error in socket authentication:', error);
-    }
-  });
-
-  // Handle group chat messages
-  socket.on('group_message', async (data) => {
-    try {
-      const { content } = data;
-      const userId = socket.userId;
-
-      if (!userId || !content) {
-        return;
-      }
-
-      // Get user info
-      const [userRows] = await promisePool.query(
-        'SELECT username, surname, role FROM users WHERE id = ?',
-        [userId]
-      );
-
-      if (userRows.length > 0) {
-        const user = userRows[0];
-        // Broadcast the message to all connected clients
-        io.emit('group_message', {
-          id: Date.now().toString(),
-          content,
-          sender: {
-            id: userId,
-            name: user.username,
-            surname: user.surname,
-            role: user.role
-          },
-          timestamp: new Date()
-        });
+        // Send active users to the newly connected client
+        sendActiveUsers();
       }
     } catch (error) {
-      console.error('Error handling group message:', error);
+      console.error('Error processing WebSocket message:', error);
     }
-  });
-
-  // Restore lesson-related events
-  socket.on('startLesson', (data) => {
-    const { lessonId, lessonName, duration, teacherName } = data;
-    io.emit('lessonStarted', {
-      lessonId,
-      lessonName,
-      duration,
-      teacherName
-    });
-    console.log('Lesson started:', data);
-  });
-
-  socket.on('endLesson', (data) => {
-    socket.broadcast.emit('lessonEnded', data);
-    console.log('Lesson ended:', data);
   });
   
   // Handle disconnection
-  socket.on('disconnect', async () => {
-    console.log('A user disconnected:', socket.id);
+  ws.on('close', () => {
+    console.log('Client disconnected from WebSocket');
     
-    // Clear the activity interval if it exists
-    if (socket.activityInterval) {
-      clearInterval(socket.activityInterval);
-    }
-    
-    // If the socket was authenticated, update the user's active status
-    if (socket.userId) {
-      // Remove this socket from the user's connections
-      if (userSockets.has(socket.userId)) {
-        userSockets.get(socket.userId).delete(socket.id);
-        
-        // If this was the user's last connection, mark them as inactive
-        if (userSockets.get(socket.userId).size === 0) {
-          try {
-            // Update the user's active status in the database
-            await promisePool.query(
-              'UPDATE users SET active = false WHERE id = ?',
-              [socket.userId]
-            );
-            
-            // Get user info for the socket event
-            const [userRows] = await promisePool.query(
-              'SELECT username, surname, role FROM users WHERE id = ?',
-              [socket.userId]
-            );
-            
-            if (userRows.length > 0) {
-              // Emit event to all clients about the user becoming inactive
-              io.emit('user_status_change', {
-                userId: socket.userId,
-                username: userRows[0].username,
-                surname: userRows[0].surname,
-                role: userRows[0].role,
-                active: false
-              });
-            }
-            
-            // Clean up the user's entry in userSockets
-            userSockets.delete(socket.userId);
-          } catch (error) {
-            console.error('Error updating user active status:', error);
-          }
-        }
+    // Remove client from the map
+    for (const [userId, client] of clients.entries()) {
+      if (client === ws) {
+        clients.delete(userId);
+        console.log(`User ${userId} disconnected`);
+        break;
       }
     }
+    
+    // Send updated active users list to all clients
+    sendActiveUsers();
   });
 });
 
-// Add a cleanup interval to handle stale connections
-setInterval(async () => {
-  for (const [userId, sockets] of userSockets.entries()) {
-    // Check if any sockets are still connected
-    const connectedSockets = Array.from(sockets).filter(socketId => {
-      const socket = io.sockets.sockets.get(socketId);
-      return socket && socket.connected;
-    });
-    
-    // If no sockets are connected, mark user as offline
-    if (connectedSockets.length === 0) {
-      try {
-        // Update user's active status to false
-        await promisePool.query(
-          'UPDATE users SET active = FALSE WHERE id = ?',
-          [userId]
-        );
-        
-        // Get user info for the socket event
-        const [userRows] = await promisePool.query(
-          'SELECT username, surname, role FROM users WHERE id = ?',
-          [userId]
-        );
-        
-        if (userRows.length > 0) {
-          io.emit('user_status_change', {
-            userId,
-            username: userRows[0].username,
-            surname: userRows[0].surname,
-            role: userRows[0].role,
-            active: false
-          });
+// Function to send active users to all connected clients
+function sendActiveUsers() {
+  // Get all active users from the database
+  promisePool.query('SELECT id, username, role, last_active FROM users WHERE active = TRUE')
+    .then(([rows]) => {
+      const activeUsers = rows.map(user => ({
+        id: user.id.toString(),
+        username: user.username,
+        role: user.role,
+        lastActive: user.last_active
+      }));
+      
+      // Broadcast to all connected clients
+      const message = JSON.stringify({
+        type: 'active_users_update',
+        users: activeUsers
+      });
+      
+      for (const client of clients.values()) {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(message);
         }
-        
-        // Clean up the user's entry in userSockets
-        userSockets.delete(userId);
-      } catch (error) {
-        console.error('Error updating user status during cleanup:', error);
       }
-    }
-  }
-}, 30000); // Run every 30 seconds
-
-// Add cleanup function for server startup
-const cleanupOnlineStatus = async () => {
-  try {
-    // Reset all users to inactive on server start
-    await promisePool.query('UPDATE users SET active = FALSE');
-    console.log('Reset all users to inactive status on server start');
-  } catch (error) {
-    console.error('Failed to cleanup online status:', error);
-  }
-};
-
-// Update the startServer function to use httpServer and include cleanup
-const startServer = async () => {
-  try {
-    await connectToDatabase();
-    await ensureTablesExist();
-    
-    // Add this line to clean up online status on server start
-    await cleanupOnlineStatus();
-    
-    const PORT = process.env.PORT || 3000;
-
-    httpServer.listen(PORT, () => {
-      console.log(`Server is running on port ${PORT}`);
-      console.log(`WebSocket server is available at ws://localhost:${PORT}`);
+    })
+    .catch(error => {
+      console.error('Error fetching active users:', error);
     });
-  } catch (error) {
-    console.error('Failed to start server:', error);
-    process.exit(1);
-  }
-};
+}
 
-startServer();
+// Start the server
+const PORT = process.env.PORT || 3001;
+httpServer.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+  console.log(`API available at http://localhost:${PORT}/api`);
+  console.log(`WebSocket server available at ws://localhost:${PORT}/ws`);
+  
+  // Log the available routes for debugging
+  console.log('\nAvailable API Routes:');
+  console.log('- GET /api/lessons/deep-learning/pdf');
+  console.log('- POST /api/lessons/deep-learning/chat');
+  
+  // Initialize the database
+  connectToDatabase()
+    .then(() => {
+      console.log('Database connected successfully');
+      ensureTablesExist()
+        .then(() => {
+          console.log('Database tables verified');
+        })
+        .catch(err => {
+          console.error('Error ensuring tables exist:', err);
+        });
+    })
+    .catch(err => {
+      console.error('Failed to connect to database:', err);
+    });
+});
 
 // Error handling
 process.on('unhandledRejection', (error) => {
@@ -1417,9 +1189,9 @@ app.get('/api/admin/students', verifyToken, isAdmin, async (req, res) => {
   } catch (error) {
     console.error('Error fetching users:', error);
     res.status(500).json({ 
+      status: 'error',
       message: 'Failed to fetch users',
-      error: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      error: error.message
     });
   }
 });
@@ -1517,11 +1289,16 @@ app.post('/api/auth/logout', async (req, res) => {
     if (userRows.length > 0) {
       // Emit socket event for online status update
       console.log('Emitting user_status_change event for user:', userId, 'to inactive');
-      io.emit('user_status_change', { 
-        userId, 
-        username: userRows[0].username,
-        surname: userRows[0].surname,
-        active: false 
+      wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify({
+            type: 'user_status_change',
+            userId,
+            username: userRows[0].username,
+            surname: userRows[0].surname,
+            active: false
+          }));
+        }
       });
     }
 
@@ -1600,17 +1377,27 @@ app.post('/api/users/active-status', verifyToken, async (req, res) => {
         const user = userRows[0];
         
         // Emit event to all clients about the new active user
-        io.emit('user_active', {
-          id: user.id,
-          username: user.username,
-          role: user.role,
-          lastActive: new Date()
+        wss.clients.forEach(client => {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify({
+              type: 'user_active',
+              id: user.id,
+              username: user.username,
+              role: user.role,
+              lastActive: new Date()
+            }));
+          }
         });
       }
     } else {
       // If the user is becoming inactive, emit an event to all clients
-      io.emit('user_inactive', {
-        userId
+      wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify({
+            type: 'user_inactive',
+            userId
+          }));
+        }
       });
     }
     
@@ -1632,5 +1419,207 @@ app.get('/api/users/active', verifyToken, async (req, res) => {
     } catch (error) {
     console.error('Error fetching active users:', error);
     res.status(500).json({ error: 'Failed to fetch active users' });
+  }
+});
+
+// Function to ensure all required tables exist
+const ensureTablesExist = async () => {
+  try {
+    console.log('Ensuring all required tables exist...');
+    
+    // Check which tables exist
+    const [tablesCheck] = await promisePool.query('SHOW TABLES');
+    const tables = tablesCheck.map(row => Object.values(row)[0]);
+    
+    // Define required tables
+    const requiredTables = ['users', 'courses', 'weeks', 'days', 'lessons'];
+    
+    // Check each required table
+    for (const table of requiredTables) {
+      if (!tables.includes(table)) {
+        console.log(`Table '${table}' does not exist. Creating it...`);
+        
+        // Create the missing table based on its type
+        switch (table) {
+          case 'users':
+            await promisePool.query(`
+              CREATE TABLE IF NOT EXISTS users (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                username VARCHAR(255) NOT NULL,
+                surname VARCHAR(255),
+                email VARCHAR(255) NOT NULL UNIQUE,
+                password VARCHAR(255) NOT NULL,
+                role ENUM('user', 'lead_student', 'admin') DEFAULT 'user',
+                active BOOLEAN DEFAULT FALSE,
+                last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+              )
+            `);
+            console.log('Users table created');
+            break;
+            
+          case 'courses':
+            await promisePool.query(`
+              CREATE TABLE IF NOT EXISTS courses (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+              )
+            `);
+            console.log('Courses table created');
+            break;
+            
+          case 'weeks':
+            await promisePool.query(`
+              CREATE TABLE IF NOT EXISTS weeks (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+              )
+            `);
+            console.log('Weeks table created');
+            break;
+            
+          case 'days':
+            await promisePool.query(`
+              CREATE TABLE IF NOT EXISTS days (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                day_name VARCHAR(255) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+              )
+            `);
+            console.log('Days table created');
+            break;
+            
+          case 'lessons':
+            await promisePool.query(`
+              CREATE TABLE IF NOT EXISTS lessons (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                lesson_name VARCHAR(255) NOT NULL,
+                course_id INT,
+                week_id INT,
+                day_id INT,
+                file_path VARCHAR(255),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (course_id) REFERENCES courses(id),
+                FOREIGN KEY (week_id) REFERENCES weeks(id),
+                FOREIGN KEY (day_id) REFERENCES days(id)
+              )
+            `);
+            console.log('Lessons table created');
+            break;
+            
+          default:
+            console.log(`No creation script for table '${table}'`);
+        }
+      } else {
+        console.log(`Table '${table}' exists`);
+      }
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Error ensuring tables exist:', error);
+    throw error;
+  }
+};
+
+// Add a specific endpoint for the Deep Learning lesson PDF
+app.get('/api/lessons/deep-learning/pdf', (req, res) => {
+  try {
+    console.log('Received request for Deep Learning PDF');
+    // In a real application, this would serve an actual PDF file
+    // For now, we'll just send a JSON response with lesson content
+    const deepLearningContent = {
+      title: "Introduction to Deep Learning",
+      content: `# Introduction to Deep Learning
+
+## What is Deep Learning?
+
+Deep learning is a subset of machine learning that uses neural networks with multiple layers (deep neural networks) to analyze various factors of data.
+
+Key characteristics of deep learning:
+- Uses neural networks with many layers (hence "deep")
+- Can automatically discover features from raw data
+- Excels at processing unstructured data like images, text, and audio
+- Requires large amounts of data and computational power
+- Has achieved state-of-the-art results in many domains
+
+## Applications of Deep Learning
+
+Deep learning has revolutionized many fields:
+
+- Computer Vision: Image classification, object detection, facial recognition
+- Natural Language Processing: Translation, sentiment analysis, chatbots
+- Speech Recognition: Voice assistants, transcription services
+- Healthcare: Disease diagnosis, drug discovery
+- Autonomous Vehicles: Self-driving cars, drones
+- Gaming: AlphaGo, game-playing agents`
+    };
+    
+    console.log('Sending Deep Learning PDF content');
+    sendSuccessResponse(res, deepLearningContent);
+  } catch (error) {
+    console.error('Error serving Deep Learning PDF:', error);
+    sendErrorResponse(res, 500, 'Failed to serve Deep Learning PDF', error);
+  }
+});
+
+// Add a chatbot endpoint for Deep Learning lesson
+app.post('/api/lessons/deep-learning/chat', (req, res) => {
+  try {
+    console.log('Received chat message:', req.body);
+    const { message } = req.body;
+    
+    if (!message) {
+      console.log('No message provided');
+      return sendErrorResponse(res, 400, 'Message is required');
+    }
+    
+    // Enhanced response logic for Deep Learning lesson
+    let response = "I apologize, but I'm having trouble processing your question at the moment. Please try asking a more specific question about the lesson content, or try again later.";
+    
+    const userQuestion = message.toLowerCase();
+    
+    // Define topics related to deep learning
+    const deepLearningTopics = [
+      "neural networks", "deep learning", "machine learning", "ai", "artificial intelligence",
+      "backpropagation", "gradient descent", "activation function", "loss function",
+      "computer vision", "natural language processing", "nlp", "cnn", "rnn", "lstm",
+      "gan", "transformer", "attention mechanism", "overfitting", "underfitting",
+      "bias", "variance", "regularization", "dropout", "batch normalization",
+      "transfer learning", "fine-tuning"
+    ];
+    
+    // Check if the question is related to deep learning topics
+    const isRelevantQuestion = deepLearningTopics.some(topic => userQuestion.includes(topic));
+    
+    if (!isRelevantQuestion && userQuestion.split(' ').length > 2) {
+      response = "I'm sorry, I can only respond to questions about the deep learning lesson content. Please ask a question related to the material we're covering.";
+    } else if (userQuestion.includes("what is") && userQuestion.includes("deep learning")) {
+      response = "Deep learning is a subset of machine learning that uses neural networks with multiple layers (deep neural networks) to analyze various factors of data. It can automatically discover features from raw data and excels at processing unstructured data like images, text, and audio. Deep neural networks are inspired by the structure of the human brain and can learn hierarchical representations of data, with each layer extracting increasingly complex features.";
+    } else if (userQuestion.includes("how") && userQuestion.includes("neural network") && (userQuestion.includes("work") || userQuestion.includes("function"))) {
+      response = "Neural networks work by simulating interconnected neurons that process information. They consist of: 1) Input layer - receives initial data, 2) Hidden layers - where computation occurs through weighted connections, 3) Output layer - produces the final result. During training, the network adjusts connection weights through backpropagation to minimize prediction errors. Each neuron applies an activation function to determine its output signal. The depth of deep neural networks allows them to learn complex patterns and representations from data.";
+    } else if (userQuestion.includes("application") || userQuestion.includes("use case")) {
+      response = "Deep learning has many applications including: 1) Computer Vision - image classification, object detection, facial recognition, and medical image analysis, 2) Natural Language Processing - translation, sentiment analysis, text generation, and chatbots, 3) Speech Recognition - voice assistants and transcription services, 4) Healthcare - disease diagnosis, drug discovery, and personalized medicine, 5) Autonomous Vehicles - self-driving cars and drones, 6) Gaming - AI opponents and procedural content generation, 7) Finance - fraud detection and algorithmic trading, 8) Recommendation Systems - personalized content and product recommendations.";
+    } else if (userQuestion.includes("challenge") || userQuestion.includes("limitation")) {
+      response = "Despite its success, deep learning faces several challenges: 1) Data Requirements - it requires large amounts of labeled data for training, 2) Computational Intensity - training complex models demands significant computing resources and energy, 3) Interpretability - models often function as 'black boxes' making decisions difficult to explain, 4) Adversarial Vulnerability - models can be fooled by specially crafted inputs, 5) Bias Amplification - models may perpetuate or amplify biases present in training data, 6) Generalization - models may struggle with scenarios not represented in training data, 7) Hyperparameter Tuning - finding optimal model configurations can be time-consuming.";
+    } else if (userQuestion.includes("history") || userQuestion.includes("development") || userQuestion.includes("evolution")) {
+      response = "The history of deep learning spans several decades: 1) 1940s-50s - Early neural network concepts emerged with McCulloch-Pitts neurons and the Perceptron, 2) 1980s - Backpropagation algorithm was popularized for training multi-layer networks, 3) 1990s - Key innovations like CNNs and LSTMs were developed but faced computational limitations, 4) 2000s - Support Vector Machines and other methods overshadowed neural networks, 5) 2010s - Deep learning renaissance began with breakthroughs like AlexNet (2012), enabled by GPUs, big data, and algorithmic improvements, 6) 2010s-Present - Rapid advancement with GANs, transformers, self-supervised learning, and foundation models like GPT and DALL-E, making deep learning accessible and applicable across numerous domains.";
+    } else if (userQuestion.includes("get started") || userQuestion.includes("begin") || userQuestion.includes("learn")) {
+      response = "To begin with deep learning: 1) Build Mathematical Foundations - understand linear algebra, calculus, probability, and statistics, 2) Learn Python Programming - the dominant language for deep learning, 3) Study Machine Learning Fundamentals - grasp basic concepts before diving into deep learning, 4) Master a Framework - learn TensorFlow, PyTorch, or Keras, 5) Take Online Courses - platforms like Coursera, edX, and fast.ai offer excellent deep learning courses, 6) Read Key Textbooks - such as 'Deep Learning' by Goodfellow, Bengio, and Courville, 7) Practice with Projects - implement papers and work on Kaggle competitions, 8) Join Communities - participate in forums like Reddit's r/MachineLearning or attend meetups, 9) Stay Updated - follow research papers on arXiv and blogs from leading AI labs.";
+    } else if (userQuestion.includes("difference") && (userQuestion.includes("machine learning") || userQuestion.includes("ml"))) {
+      response = "The key differences between deep learning and traditional machine learning are: 1) Feature Engineering - traditional ML often requires manual feature extraction, while deep learning automatically learns features from raw data, 2) Data Volume - deep learning typically requires more data to perform well, 3) Computational Resources - deep learning models are more computationally intensive to train, 4) Architecture - deep learning uses neural networks with multiple layers, while traditional ML uses algorithms like decision trees, SVMs, or linear regression, 5) Problem Complexity - deep learning excels at complex tasks like image recognition and natural language processing where traditional ML might struggle, 6) Interpretability - traditional ML models are often more interpretable than deep learning models.";
+    } else if (userQuestion.includes("architecture") || userQuestion.includes("type") || userQuestion.includes("model")) {
+      response = "Common deep learning architectures include: 1) Convolutional Neural Networks (CNNs) - specialized for grid-like data such as images, using convolutional layers to detect spatial patterns, 2) Recurrent Neural Networks (RNNs) - designed for sequential data like text or time series, with LSTM and GRU variants addressing the vanishing gradient problem, 3) Transformers - using self-attention mechanisms for parallel processing of sequences, powering models like BERT and GPT, 4) Generative Adversarial Networks (GANs) - consisting of generator and discriminator networks that compete to create realistic synthetic data, 5) Autoencoders - unsupervised learning models that compress then reconstruct data, useful for dimensionality reduction and anomaly detection, 6) Deep Reinforcement Learning - combining deep learning with reinforcement learning for decision-making tasks.";
+    } else if (isRelevantQuestion) {
+      response = "Your question about deep learning is relevant to our lesson. To provide a more specific answer, could you please rephrase your question or specify which aspect of deep learning you'd like to learn more about? I can discuss neural network architectures, training methods, applications, limitations, history, or getting started in the field.";
+    }
+    
+    console.log('Sending chat response:', response);
+    sendSuccessResponse(res, { response });
+  } catch (error) {
+    console.error('Error processing chat message:', error);
+    sendErrorResponse(res, 500, 'Failed to process chat message', error);
   }
 }); 

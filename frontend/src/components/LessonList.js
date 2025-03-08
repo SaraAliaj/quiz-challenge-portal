@@ -1,5 +1,5 @@
 import React from 'react';
-import Chatbot from './Chatbot'; // Import the Chatbot component
+import { ChatBot } from './ChatBot'; // Import the new ChatBot component
 
 class LessonList extends React.Component {
     state = {
@@ -19,7 +19,11 @@ class LessonList extends React.Component {
                         {lesson.name}
                     </div>
                 ))}
-                {this.state.selectedLesson && <Chatbot lesson={this.state.selectedLesson} />}
+                {this.state.selectedLesson && (
+                    <div style={{ height: '400px' }}>
+                        <ChatBot topic={this.state.selectedLesson.name} />
+                    </div>
+                )}
             </div>
         );
     }
