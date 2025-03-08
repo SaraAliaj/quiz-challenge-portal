@@ -1,0 +1,146 @@
+.active-users-sidebar {
+  display: flex;
+  flex-direction: column;
+  background-color: #1e293b;
+  color: #e2e8f0;
+  width: 220px;
+  height: 100%;
+  transition: width 0.3s ease;
+  overflow: hidden;
+  border-left: 1px solid #334155;
+  flex-shrink: 0;
+}
+
+.active-users-sidebar.collapsed {
+  width: 60px;
+}
+
+.active-users-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px;
+  font-weight: 600;
+  font-size: 14px;
+  border-bottom: 1px solid #334155;
+  background-color: #0f172a;
+}
+
+.active-users-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  font-size: 12px;
+  color: #94a3b8;
+  border-bottom: 1px solid #334155;
+}
+
+.status-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.status-indicator.connected {
+  background-color: #10b981;
+  box-shadow: 0 0 5px #10b981;
+}
+
+.status-indicator.disconnected {
+  background-color: #ef4444;
+  box-shadow: 0 0 5px #ef4444;
+}
+
+.active-users-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+.active-users-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.active-users-list::-webkit-scrollbar-track {
+  background: #1e293b;
+}
+
+.active-users-list::-webkit-scrollbar-thumb {
+  background-color: #475569;
+  border-radius: 4px;
+}
+
+.no-users {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 60px;
+  color: #94a3b8;
+  font-size: 12px;
+  font-style: italic;
+}
+
+.active-user-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  transition: background-color 0.2s;
+  cursor: default;
+}
+
+.active-user-item:hover {
+  background-color: #334155;
+}
+
+.active-user-item.admin {
+  border-left: 3px solid #f59e0b;
+}
+
+.active-user-item.lead-student {
+  border-left: 3px solid #3b82f6;
+}
+
+.user-avatar {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background-color: #475569;
+  font-weight: 600;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.admin .user-avatar {
+  background-color: #f59e0b;
+  color: #1e293b;
+}
+
+.lead-student .user-avatar {
+  background-color: #3b82f6;
+  color: #1e293b;
+}
+
+.user-info {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.user-name {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-role {
+  font-size: 11px;
+  color: #94a3b8;
+  text-transform: capitalize;
+} 
