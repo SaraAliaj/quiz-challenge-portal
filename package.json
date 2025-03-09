@@ -13,6 +13,7 @@
     "check-db": "cd backend/node && npm run check-db",
     "create-test-user": "cd backend/node && node create-test-user.js",
     "test:ws": "node test-websocket.js",
+    "chatbot": "cd backend/python && python chatbot.py",
     "start": "concurrently \"npm run backend:node\" \"npm run backend:python\" \"npm run frontend:dev\""
   },
   "devDependencies": {

@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Create an axios instance with a base URL
 const axiosInstance = axios.create({
-  baseURL: 'http://localhost:8000/api',  // Point to the Python backend
+  baseURL: 'http://localhost:3001/api',  // Updated to point to the Node.js backend on port 3001
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json'

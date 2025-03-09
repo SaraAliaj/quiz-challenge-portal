@@ -22,9 +22,13 @@ if not XAI_API_KEY:
 
 # Database configuration
 DB_HOST = os.getenv("DB_HOST", "localhost")
-DB_USER = os.getenv("DB_USER", "Sara")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "Sara0330!!")
+DB_USER = os.getenv("DB_USER")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
 DB_NAME = os.getenv("DB_NAME", "aischool")
+
+# Check if database credentials are provided
+if not DB_USER or not DB_PASSWORD:
+    print("Warning: DB_USER or DB_PASSWORD environment variables not set. Database functionality will be limited.")
 
 # Initialize OpenAI client if API key is available
 try:
@@ -36,8 +40,8 @@ try:
                 base_url="https://api.x.ai/v1",
             )
             print("Grok API client initialized successfully")
-        except TypeError as e:
-            print(f"TypeError initializing API client: {e}")
+        except Exception as e:
+            print(f"Error initializing API client: {e}")
             # Fallback to a more basic initialization if needed
             try:
                 import openai
@@ -61,7 +65,7 @@ app = FastAPI()
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5174", "http://localhost:5173"],  # Specific origins instead of wildcard
+    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://localhost:5175", "http://localhost:5176", "http://localhost:5177"],  # Include all possible frontend ports
     allow_credentials=True,
     allow_methods=["*"],  # Allow all methods
     allow_headers=["*"],  # Allow all headers
@@ -861,5 +865,5 @@ def get_sample_lessons():
 
 if __name__ == "__main__":
     import uvicorn
-    print("Starting FastAPI server on http://localhost:8000")
-    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info") 
+    print("Starting FastAPI server on http://localhost:8002")
+    uvicorn.run(app, host="0.0.0.0", port=8002, log_level="info") 

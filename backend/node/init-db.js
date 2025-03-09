@@ -9,10 +9,16 @@ const __dirname = dirname(__filename);
 
 dotenv.config({ path: join(__dirname, '.env') });
 
+// Check for required environment variables
+if (!process.env.DB_USER || !process.env.DB_PASSWORD) {
+  console.error('Error: DB_USER and DB_PASSWORD environment variables must be set');
+  process.exit(1);
+}
+
 const connection = mysql.createConnection({
   host: process.env.DB_HOST || 'localhost',
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || 'password'
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD
 });
 
 connection.connect((err) => {

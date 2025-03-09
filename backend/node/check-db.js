@@ -7,10 +7,16 @@ async function checkDatabase() {
   console.log('Database Check Script');
   console.log('=====================');
   
-  // Log database configuration
+  // Check for required environment variables
+  if (!process.env.DB_USER || !process.env.DB_PASSWORD) {
+    console.error('Error: DB_USER and DB_PASSWORD environment variables must be set');
+    process.exit(1);
+  }
+  
+  // Log database configuration without exposing sensitive information
   console.log('Database configuration:', {
     host: process.env.DB_HOST || 'localhost',
-    user: process.env.DB_USER || 'root',
+    user: process.env.DB_USER,
     database: process.env.DB_NAME || 'aischool',
     hasPassword: !!process.env.DB_PASSWORD
   });
@@ -21,8 +27,8 @@ async function checkDatabase() {
     // Connect to the database
     connection = await mysql.createConnection({
       host: process.env.DB_HOST || 'localhost',
-      user: process.env.DB_USER || 'root',
-      password: process.env.DB_PASSWORD || 'password',
+      user: process.env.DB_USER,
+      password: process.env.DB_PASSWORD,
       database: process.env.DB_NAME || 'aischool'
     });
     

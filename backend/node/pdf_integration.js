@@ -12,11 +12,16 @@ dotenv.config();
  */
 class PDFIntegration {
   constructor() {
+    // Check for required environment variables
+    if (!process.env.DB_USER || !process.env.DB_PASSWORD) {
+      throw new Error('DB_USER and DB_PASSWORD environment variables must be set');
+    }
+    
     // Database connection pool
     this.pool = mysql.createPool({
       host: process.env.DB_HOST || 'localhost',
-      user: process.env.DB_USER || 'root',
-      password: process.env.DB_PASSWORD || 'password',
+      user: process.env.DB_USER,
+      password: process.env.DB_PASSWORD,
       database: process.env.DB_NAME || 'aischool',
       waitForConnections: true,
       connectionLimit: 10,

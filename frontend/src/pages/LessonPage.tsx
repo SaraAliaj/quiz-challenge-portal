@@ -1,6 +1,6 @@
 import { useParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import LessonChatbot from '@/components/LessonChatbot';
+import { LessonChatbot } from '@/components/LessonChatbot';
 import { api } from '@/server/api';
 import { Button } from '@/components/ui/button';
 import { Download, FileText, Loader2 } from 'lucide-react';
