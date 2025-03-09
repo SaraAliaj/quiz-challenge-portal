@@ -10,52 +10,57 @@ import {
   ChevronDown,
   Check,
   ChevronLeft,
+  Loader2,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { api } from "@/server/api";
 
-const courses = [
-  {
-    id: 1,
-    title: "Deep Learning Fundamentals",
-    weeks: [
-      {
-        id: 1,
-        title: "Week 1",
-        lessons: [
-          { id: 1, title: "Neural Networks Basics", time: "10:00", completed: true },
-          { id: 2, title: "Activation Functions", time: "11:30", completed: false },
-        ],
-      },
-      {
-        id: 2,
-        title: "Week 2",
-        lessons: [
-          { id: 3, title: "Backpropagation", time: "14:00", completed: false },
-          { id: 4, title: "Optimization Techniques", time: "15:30", completed: false },
-        ],
-      },
-    ],
-  },
-  {
-    id: 2,
-    title: "Machine Learning Applications",
-    weeks: [
-      {
-        id: 1,
-        title: "Week 1",
-        lessons: [
-          { id: 1, title: "Introduction to ML", time: "09:00", completed: false },
-          { id: 2, title: "Linear Regression", time: "10:30", completed: false },
-        ],
-      },
-    ],
-  },
-];
+interface Lesson {
+  id: string;
+  name: string;
+}
+
+interface Week {
+  id: string;
+  name: string;
+  lessons: Lesson[];
+}
+
+interface Course {
+  id: string;
+  name: string;
+  weeks: Week[];
+}
 
 export default function Sidebar() {
   const [expandedCourse, setExpandedCourse] = useState<number | null>(null);
   const [expandedWeek, setExpandedWeek] = useState<{courseId: number, weekId: number} | null>(null);
   const [collapsed, setCollapsed] = useState(false);
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchCourses = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const courseStructure = await api.getCourseStructure();
+        if (courseStructure && courseStructure.length > 0) {
+          setCourses(courseStructure);
+        } else {
+          setError("No courses found");
+        }
+      } catch (err) {
+        console.error("Failed to fetch courses:", err);
+        setError("Failed to load courses");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchCourses();
+  }, []);
 
   const toggleCourse = (courseId: number) => {
     setExpandedCourse(expandedCourse === courseId ? null : courseId);
@@ -96,82 +101,85 @@ export default function Sidebar() {
           <div className={`font-semibold text-sm text-gray-500 uppercase tracking-wider px-2 ${collapsed ? 'text-center' : ''}`}>
             {!collapsed && "Curriculum"}
           </div>
-          {courses.map((course) => (
-            <div key={course.id} className="space-y-1">
-              <Button
-                variant="ghost"
-                className={`w-full ${collapsed ? 'justify-center' : 'justify-between'}`}
-                onClick={() => toggleCourse(course.id)}
-              >
-                <div className="flex items-center">
-                  <Book className={`h-4 w-4 ${collapsed ? '' : 'mr-2'}`} />
-                  <span className={`transition-opacity duration-300 ${collapsed ? 'opacity-0 w-0' : 'opacity-100'}`}>
-                    {course.title}
-                  </span>
-                </div>
-                {!collapsed && (
-                  <ChevronDown
-                    className={`h-4 w-4 transition-transform ${
-                      expandedCourse === course.id ? "transform rotate-180" : ""
-                    }`}
-                  />
-                )}
-              </Button>
-              {expandedCourse === course.id && (
-                <div className="ml-4 space-y-1">
-                  {course.weeks.map((week) => (
-                    <div key={week.id}>
-                      <Button
-                        variant="ghost"
-                        className="w-full justify-between pl-6"
-                        onClick={() => toggleWeek(course.id, week.id)}
-                      >
-                        <span>{week.title}</span>
-                        <ChevronDown
-                          className={`h-4 w-4 transition-transform ${
-                            expandedWeek?.courseId === course.id &&
-                            expandedWeek?.weekId === week.id
-                              ? "transform rotate-180"
-                              : ""
-                          }`}
-                        />
-                      </Button>
-                      {expandedWeek?.courseId === course.id &&
-                        expandedWeek?.weekId === week.id && (
-                          <div className="ml-4 space-y-1">
-                            {week.lessons.map((lesson) => (
-                              <Link
-                                key={lesson.id}
-                                to={`/lessons/${course.id}/${week.id}/${lesson.id}`}
-                                className={`flex items-center justify-between px-6 py-2 text-sm rounded-lg hover:bg-gray-100 ${
-                                  lesson.completed ? "text-gray-500" : ""
-                                }`}
-                              >
-                                <div className="flex items-center space-x-2">
-                                  {lesson.completed && (
-                                    <Check className="h-4 w-4 text-green-500" />
-                                  )}
-                                  <span
-                                    className={`${
-                                      lesson.completed ? "line-through" : ""
-                                    }`}
-                                  >
-                                    {lesson.title}
-                                  </span>
-                                </div>
-                                <span className="text-xs text-gray-500">
-                                  {lesson.time}
-                                </span>
-                              </Link>
-                            ))}
-                          </div>
-                        )}
-                    </div>
-                  ))}
-                </div>
-              )}
+          
+          {isLoading ? (
+            <div className="flex justify-center py-4">
+              <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
             </div>
-          ))}
+          ) : error ? (
+            <div className="text-sm text-red-500 px-2 py-2">
+              {!collapsed && error}
+            </div>
+          ) : (
+            courses.map((course) => (
+              <div key={course.id} className="space-y-1">
+                <Button
+                  variant="ghost"
+                  className={`w-full ${collapsed ? 'justify-center' : 'justify-between'}`}
+                  onClick={() => toggleCourse(parseInt(course.id))}
+                >
+                  <div className="flex items-center">
+                    <Book className={`h-4 w-4 ${collapsed ? '' : 'mr-2'}`} />
+                    <span className={`transition-opacity duration-300 ${collapsed ? 'opacity-0 w-0' : 'opacity-100'}`}>
+                      {course.name}
+                    </span>
+                  </div>
+                  {!collapsed && (
+                    <ChevronDown
+                      className={`h-4 w-4 transition-transform ${
+                        expandedCourse === parseInt(course.id) ? "transform rotate-180" : ""
+                      }`}
+                    />
+                  )}
+                </Button>
+                {expandedCourse === parseInt(course.id) && (
+                  <div className="ml-4 space-y-1">
+                    {course.weeks.map((week) => (
+                      <div key={week.id}>
+                        <Button
+                          variant="ghost"
+                          className="w-full justify-between pl-6"
+                          onClick={() => toggleWeek(parseInt(course.id), parseInt(week.id))}
+                        >
+                          <span>{week.name}</span>
+                          <ChevronDown
+                            className={`h-4 w-4 transition-transform ${
+                              expandedWeek?.courseId === parseInt(course.id) &&
+                              expandedWeek?.weekId === parseInt(week.id)
+                                ? "transform rotate-180"
+                                : ""
+                            }`}
+                          />
+                        </Button>
+                        {expandedWeek?.courseId === parseInt(course.id) &&
+                          expandedWeek?.weekId === parseInt(week.id) && (
+                            <div className="ml-4 space-y-1">
+                              {week.lessons.length > 0 ? (
+                                week.lessons.map((lesson) => (
+                                  <Link
+                                    key={lesson.id}
+                                    to={`/lessons/${course.id}/${week.id}/${lesson.id}`}
+                                    className="flex items-center justify-between px-6 py-2 text-sm rounded-lg hover:bg-gray-100"
+                                  >
+                                    <div className="flex items-center space-x-2">
+                                      <span>{lesson.name}</span>
+                                    </div>
+                                  </Link>
+                                ))
+                              ) : (
+                                <div className="text-sm text-gray-500 px-6 py-2">
+                                  No lessons available
+                                </div>
+                              )}
+                            </div>
+                          )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))
+          )}
         </div>
 
         <div className="pt-4 space-y-2">
@@ -196,6 +204,14 @@ export default function Sidebar() {
               <MessageCircle className={`h-4 w-4 ${collapsed ? '' : 'mr-2'}`} />
               <span className={`transition-opacity duration-300 ${collapsed ? 'opacity-0 w-0' : 'opacity-100'}`}>
                 AI Chat
+              </span>
+            </Button>
+          </Link>
+          <Link to="/group-chat">
+            <Button variant="ghost" className={`w-full ${collapsed ? 'justify-center' : 'justify-start'}`}>
+              <MessageCircle className={`h-4 w-4 ${collapsed ? '' : 'mr-2'}`} />
+              <span className={`transition-opacity duration-300 ${collapsed ? 'opacity-0 w-0' : 'opacity-100'}`}>
+                Group Chat
               </span>
             </Button>
           </Link>

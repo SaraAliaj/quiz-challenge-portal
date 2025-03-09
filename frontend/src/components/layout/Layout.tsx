@@ -600,7 +600,7 @@ export default function Layout() {
           <div className="absolute bottom-4 left-0 right-0 px-4">
             <Button
               variant="ghost"
-              className="w-full justify-start text-primary/70 hover:bg-secondary/50"
+              className="w-full justify-start text-red-600 hover:bg-red-50 hover:text-red-700"
               onClick={handleSignOut}
             >
               <LogOut className={cn("h-4 w-4", !isSidebarCollapsed && "mr-2")} />

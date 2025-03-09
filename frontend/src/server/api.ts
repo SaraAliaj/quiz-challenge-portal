@@ -343,5 +343,27 @@ const api = {
       throw error;
     }
   },
+
+  // Get lesson status
+  getLessonStatus: async (lessonId: string) => {
+    try {
+      const response = await axiosInstance.get(`/lessons/${lessonId}/status`);
+      return response.data;
+    } catch (error) {
+      console.error('Error getting lesson status:', error);
+      throw error;
+    }
+  },
+  
+  // Get lesson PDF URL
+  getLessonPdf: async (lessonId: string) => {
+    try {
+      const response = await axiosInstance.get(`/lessons/${lessonId}/pdf`);
+      return response.data;
+    } catch (error) {
+      console.error('Error getting lesson PDF:', error);
+      throw error;
+    }
+  },
 };
 export { api };

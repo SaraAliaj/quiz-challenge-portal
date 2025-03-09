@@ -1035,6 +1035,61 @@ wss.on('connection', (ws) => {
         // Send active users to the newly connected client
         sendActiveUsers();
       }
+      
+      // Handle lesson start
+      if (data.type === 'startLesson') {
+        console.log('Lesson start request received:', data);
+        
+        // Broadcast lesson started notification to all clients
+        const lessonStartedMessage = JSON.stringify({
+          type: 'lessonStarted',
+          lessonId: data.lessonId,
+          lessonName: data.lessonName,
+          teacherName: data.teacherName,
+          duration: data.duration,
+          startTime: new Date()
+        });
+        
+        for (const client of clients.values()) {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(lessonStartedMessage);
+          }
+        }
+        
+        // Store the lesson status in the database
+        promisePool.query(
+          'INSERT INTO lesson_sessions (lesson_id, started_by, duration, start_time) VALUES (?, ?, ?, NOW()) ON DUPLICATE KEY UPDATE duration = ?, start_time = NOW()',
+          [data.lessonId, data.userId || null, data.duration, data.duration]
+        ).catch(err => {
+          console.error('Error storing lesson session:', err);
+        });
+      }
+      
+      // Handle lesson end
+      if (data.type === 'endLesson') {
+        console.log('Lesson end request received:', data);
+        
+        // Broadcast lesson ended notification to all clients
+        const lessonEndedMessage = JSON.stringify({
+          type: 'lessonEnded',
+          lessonId: data.lessonId,
+          teacherName: data.teacherName
+        });
+        
+        for (const client of clients.values()) {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(lessonEndedMessage);
+          }
+        }
+        
+        // Update the lesson status in the database
+        promisePool.query(
+          'UPDATE lesson_sessions SET end_time = NOW() WHERE lesson_id = ? AND end_time IS NULL',
+          [data.lessonId]
+        ).catch(err => {
+          console.error('Error updating lesson session:', err);
+        });
+      }
     } catch (error) {
       console.error('Error processing WebSocket message:', error);
     }
@@ -1621,5 +1676,106 @@ app.post('/api/lessons/deep-learning/chat', (req, res) => {
   } catch (error) {
     console.error('Error processing chat message:', error);
     sendErrorResponse(res, 500, 'Failed to process chat message', error);
+  }
+});
+
+// Create lesson_sessions table if it doesn't exist
+const initializeLessonSessionsTable = async () => {
+  try {
+    await promisePool.query(`
+      CREATE TABLE IF NOT EXISTS lesson_sessions (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        lesson_id VARCHAR(255) NOT NULL,
+        started_by INT,
+        duration INT NOT NULL,
+        start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        end_time TIMESTAMP NULL,
+        UNIQUE KEY unique_active_lesson (lesson_id, end_time),
+        FOREIGN KEY (started_by) REFERENCES users(id) ON DELETE SET NULL
+      )
+    `);
+    console.log('Lesson sessions table initialized');
+  } catch (error) {
+    console.error('Error initializing lesson sessions table:', error);
+  }
+};
+
+// Call the initialization function
+initializeLessonSessionsTable();
+
+// Get lesson status
+app.get('/api/lessons/:id/status', async (req, res) => {
+  try {
+    const lessonId = req.params.id;
+    
+    // Check if there's an active session for this lesson
+    const [rows] = await promisePool.query(
+      `SELECT ls.*, u.username as teacher_name 
+       FROM lesson_sessions ls 
+       LEFT JOIN users u ON ls.started_by = u.id 
+       WHERE ls.lesson_id = ? AND (ls.end_time IS NULL OR ls.end_time > DATE_SUB(NOW(), INTERVAL ls.duration MINUTE))
+       ORDER BY ls.start_time DESC LIMIT 1`,
+      [lessonId]
+    );
+    
+    if (rows.length > 0) {
+      const session = rows[0];
+      res.json({
+        started: true,
+        startedBy: session.started_by,
+        teacherName: session.teacher_name,
+        lessonId: session.lesson_id,
+        duration: session.duration,
+        startTime: session.start_time,
+        endTime: session.end_time
+      });
+    } else {
+      res.json({
+        started: false,
+        startedBy: null
+      });
+    }
+  } catch (error) {
+    console.error('Error checking lesson status:', error);
+    res.status(500).json({ error: 'Failed to check lesson status' });
+  }
+});
+
+// Get lesson PDF
+app.get('/api/lessons/:id/pdf', async (req, res) => {
+  try {
+    const lessonId = req.params.id;
+    
+    // Get the lesson details including file path
+    const [rows] = await promisePool.query(
+      'SELECT * FROM lessons WHERE id = ?',
+      [lessonId]
+    );
+    
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Lesson not found' });
+    }
+    
+    const lesson = rows[0];
+    
+    // Check if the lesson has a file path
+    if (!lesson.file_path) {
+      return res.status(404).json({ error: 'No PDF available for this lesson' });
+    }
+    
+    // Construct the full file path
+    const filePath = path.resolve(lesson.file_path);
+    
+    // Check if the file exists
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'PDF file not found' });
+    }
+    
+    // Return the PDF URL
+    const pdfUrl = `/api/lessons/${lessonId}/download`;
+    res.json({ pdfUrl });
+  } catch (error) {
+    console.error('Error getting lesson PDF:', error);
+    res.status(500).json({ error: 'Failed to get lesson PDF' });
   }
 }); 

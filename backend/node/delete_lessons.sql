@@ -1,0 +1,1 @@
+DELETE FROM lessons WHERE id BETWEEN 3 AND 500; 
