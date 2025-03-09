@@ -315,90 +315,65 @@ export default function LessonChatbot({
   };
 
   return (
-    <div className="flex h-[calc(100vh-2rem)]">
-      {/* PDF Viewer Section - 50% width */}
-      <div className="w-1/2 h-full p-4 border-r">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold flex items-center">
-            <FileText className="mr-2 h-5 w-5 text-primary" />
-            {lessonTitle}
-          </h2>
-          <div className="flex gap-2">
-            <Button 
-              variant="outline" 
-              className="flex items-center gap-2"
-              onClick={() => window.open(api.downloadLessonFile(lessonId), '_blank')}
-            >
-              <Download className="h-4 w-4" />
-              Download PDF
-            </Button>
-          </div>
-        </div>
-        
-        {/* PDF Viewer Container */}
-        <div className="w-full h-[calc(100vh-8rem)] bg-white rounded-lg overflow-hidden border">
-          <embed
-            src={`${api.downloadLessonFile(lessonId)}#toolbar=0&navpanes=0&scrollbar=1&zoom=page-fit`}
-            type="application/pdf"
-            className="w-full h-full"
-          />
-        </div>
+    <div className="flex flex-col h-full">
+      <div className="flex items-center justify-between p-4 border-b">
+        <h2 className="text-xl font-bold flex items-center">
+          <MessageSquare className="mr-2 h-5 w-5 text-black" />
+          AI Assistant
+        </h2>
       </div>
 
-      {/* Chat Section - 50% width */}
-      <div className="w-1/2 h-full flex flex-col">
-        <ScrollArea ref={scrollAreaRef} className="flex-grow p-4">
-          <div className="space-y-4">
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex items-start gap-3 ${
-                  message.sender === 'user' ? 'flex-row-reverse' : 'flex-row'
-                }`}
-              >
-                <Avatar className={`h-8 w-8 ${message.sender === 'user' ? 'bg-primary' : 'bg-slate-200'}`}>
-                  <AvatarFallback className="text-xs">
-                    {message.sender === 'user' ? 
-                      <User className="h-4 w-4" /> : 
-                      <Bot className="h-4 w-4" />
-                    }
-                  </AvatarFallback>
-                </Avatar>
-                
-                <div className="space-y-1 max-w-[75%]">
-                  <div
-                    className={`rounded-lg px-4 py-2 ${
-                      message.sender === 'user'
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted'
-                    }`}
-                  >
-                    <p className="text-sm">{message.content}</p>
-                  </div>
-                  <p className="text-xs text-slate-500 px-2">
-                    {message.timestamp.toLocaleTimeString()}
-                  </p>
+      <ScrollArea ref={scrollAreaRef} className="flex-grow p-4">
+        <div className="space-y-4">
+          {messages.map((message) => (
+            <div
+              key={message.id}
+              className={`flex items-start gap-3 ${
+                message.sender === 'user' ? 'flex-row-reverse' : 'flex-row'
+              }`}
+            >
+              <Avatar className={`h-8 w-8 ${message.sender === 'user' ? 'bg-black' : 'bg-gray-200'}`}>
+                <AvatarFallback className="text-xs">
+                  {message.sender === 'user' ? 
+                    <User className="h-4 w-4" /> : 
+                    <Bot className="h-4 w-4 text-black" />
+                  }
+                </AvatarFallback>
+              </Avatar>
+              
+              <div className="space-y-1 max-w-[75%]">
+                <div
+                  className={`rounded-lg px-4 py-2 ${
+                    message.sender === 'user'
+                      ? 'bg-black text-white'
+                      : 'bg-gray-100'
+                  }`}
+                >
+                  <p className="text-sm">{message.content}</p>
                 </div>
+                <p className="text-xs text-gray-500 px-2">
+                  {message.timestamp.toLocaleTimeString()}
+                </p>
               </div>
-            ))}
-            <div ref={messagesEndRef} />
-          </div>
-        </ScrollArea>
-
-        <div className="p-4 border-t bg-slate-50">
-          <form onSubmit={handleSubmit} className="flex gap-2">
-            <Input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Type your message..."
-              disabled={isLoading}
-              className="flex-1"
-            />
-            <Button type="submit" disabled={isLoading}>
-              {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            </Button>
-          </form>
+            </div>
+          ))}
+          <div ref={messagesEndRef} />
         </div>
+      </ScrollArea>
+
+      <div className="p-4 border-t bg-gray-50">
+        <form onSubmit={handleSubmit} className="flex gap-2">
+          <Input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Type your message..."
+            disabled={isLoading}
+            className="flex-1"
+          />
+          <Button type="submit" disabled={isLoading} className="bg-black hover:bg-gray-800">
+            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+          </Button>
+        </form>
       </div>
     </div>
   );

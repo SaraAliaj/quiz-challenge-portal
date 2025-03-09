@@ -97,7 +97,6 @@ const initializeDatabase = async () => {
         password VARCHAR(255) NOT NULL,
         role ENUM('user', 'lead_student', 'admin') DEFAULT 'user',
         active BOOLEAN DEFAULT FALSE,
-        last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -359,10 +358,9 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
     
     // Update user's active status
     await promisePool.query(
-      'UPDATE users SET active = true, last_active = NOW() WHERE id = ?',
-      [user.id]
+      'UPDATE users SET active = ? WHERE id = ?',
+      [user.active ? 1 : 0, user.id]
     );
-    
     // Return user data and token
     sendSuccessResponse(res, {
       user: {
@@ -1116,13 +1114,13 @@ wss.on('connection', (ws) => {
 // Function to send active users to all connected clients
 function sendActiveUsers() {
   // Get all active users from the database
-  promisePool.query('SELECT id, username, role, last_active FROM users WHERE active = TRUE')
+  promisePool.query('SELECT id, username, role, active FROM users WHERE active = TRUE')
     .then(([rows]) => {
       const activeUsers = rows.map(user => ({
         id: user.id.toString(),
         username: user.username,
         role: user.role,
-        lastActive: user.last_active
+        Active: user.active
       }));
       
       // Broadcast to all connected clients
@@ -1416,7 +1414,7 @@ app.post('/api/users/active-status', verifyToken, async (req, res) => {
     
     // Update user's active status in the database
     await promisePool.query(
-      'UPDATE users SET active = ?, last_active = NOW() WHERE id = ?',
+      'UPDATE users SET active = ?, active = NOW() WHERE id = ?',
       [active, userId]
     );
     
@@ -1439,7 +1437,7 @@ app.post('/api/users/active-status', verifyToken, async (req, res) => {
               id: user.id,
               username: user.username,
               role: user.role,
-              lastActive: new Date()
+              Active: new Date()
             }));
           }
         });
@@ -1467,7 +1465,7 @@ app.post('/api/users/active-status', verifyToken, async (req, res) => {
 app.get('/api/users/active', verifyToken, async (req, res) => {
   try {
     const [activeUsers] = await promisePool.query(
-      'SELECT id, username, role, last_active FROM users WHERE active = true'
+      'SELECT id, username, role, active FROM users WHERE active = true'
     );
     
     res.status(200).json(activeUsers);
@@ -1506,7 +1504,6 @@ const ensureTablesExist = async () => {
                 password VARCHAR(255) NOT NULL,
                 role ENUM('user', 'lead_student', 'admin') DEFAULT 'user',
                 active BOOLEAN DEFAULT FALSE,
-                last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
               )
             `);

@@ -1,25 +1,27 @@
 import axios from 'axios';
 
-// Use relative URL since we're using Vite's proxy
+// Create an axios instance with a base URL
 const axiosInstance = axios.create({
-  baseURL: '/api',  // Changed from absolute URL to relative
+  baseURL: 'http://localhost:8000/api',  // Point to the Python backend
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json'
   },
-  withCredentials: true // Add withCredentials for CORS
+  withCredentials: false // Don't use credentials for CORS
 });
 
-// Add request interceptor to include auth token
+// Add a request interceptor to include the auth token in all requests
 axiosInstance.interceptors.request.use(
-  config => {
+  (config) => {
     const token = localStorage.getItem('authToken');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   },
-  error => Promise.reject(error)
+  (error) => {
+    return Promise.reject(error);
+  }
 );
 
 // Add response interceptor for error handling
@@ -170,61 +172,121 @@ const api = {
 
   // New method to fetch the full course structure with weeks and lessons
   getCourseStructure: async () => {
+    interface ApiLesson {
+      id: number;
+      lesson_name: string;
+      file_path: string;
+      course_id: number;
+      course_name: string;
+      week_id: number;
+      week_name: string;
+      day_id: number;
+      day_name: string;
+    }
+
+    interface CourseMapItem {
+      id: string;
+      name: string;
+      weeks: Map<string, WeekMapItem>;
+    }
+
+    interface WeekMapItem {
+      id: string;
+      name: string;
+      lessons: Array<{
+        id: string;
+        name: string;
+        time?: string;
+      }>;
+    }
+
     try {
       // Fetch lessons which include course, week, and day information
+      console.log('Fetching course structure from API...');
       const lessonsResponse = await axiosInstance.get('/lessons');
       console.log('Raw lessons response:', lessonsResponse);
       
       // The response format is { status, message, data }
-      const lessons = lessonsResponse.data.data || [];
+      const lessons = (lessonsResponse.data.data || []) as ApiLesson[];
       console.log('Extracted lessons data:', lessons);
 
+      if (!lessons || lessons.length === 0) {
+        console.warn('No lessons data returned from API');
+        return [];
+      }
+
       // Group lessons by course, week, and day
-      const courseMap = new Map();
+      const courseMap = new Map<string, CourseMapItem>();
 
       // Process each lesson to build the course structure
       lessons.forEach(lesson => {
+        console.log('Processing lesson:', lesson);
+        
+        // Ensure all required fields are present
+        if (!lesson.course_id || !lesson.week_id || !lesson.id) {
+          console.warn('Lesson missing required fields:', lesson);
+          return; // Skip this lesson
+        }
+        
         const courseId = lesson.course_id.toString();
         const weekId = lesson.week_id.toString();
-        const dayId = lesson.day_id.toString();
+        const dayId = lesson.day_id ? lesson.day_id.toString() : '0';
         
         // Initialize course if not exists
         if (!courseMap.has(courseId)) {
           courseMap.set(courseId, {
             id: courseId,
-            name: lesson.course_name,
-            weeks: new Map()
+            name: lesson.course_name || `Course ${courseId}`,
+            weeks: new Map<string, WeekMapItem>()
           });
         }
         
-        const course = courseMap.get(courseId);
+        const course = courseMap.get(courseId)!;
         
         // Initialize week if not exists
         if (!course.weeks.has(weekId)) {
           course.weeks.set(weekId, {
             id: weekId,
-            name: lesson.week_name,
+            name: lesson.week_name || `Week ${weekId}`,
             lessons: []
           });
         }
         
-        // Add lesson to the week
-        course.weeks.get(weekId).lessons.push({
+        // Add lesson to week
+        const week = course.weeks.get(weekId)!;
+        week.lessons.push({
           id: lesson.id.toString(),
-          name: `${lesson.day_name}: ${lesson.title}`,
+          name: lesson.lesson_name || `Lesson ${lesson.id}`,
+          time: lesson.day_name || `Day ${dayId}`
         });
       });
-
-      // Convert maps to arrays for the final structure
-      const result = Array.from(courseMap.values()).map(course => ({
-        ...course,
-        weeks: Array.from(course.weeks.values())
-      }));
-
-      return result;
+      
+      // Convert maps to arrays for easier consumption
+      const courses = Array.from(courseMap.values()).map(course => {
+        return {
+          id: course.id,
+          name: course.name,
+          weeks: Array.from(course.weeks.values()).map(week => {
+            return {
+              id: week.id,
+              name: week.name,
+              lessons: [...week.lessons].sort((a, b) => {
+                // Try to extract day numbers from time strings
+                const dayA = a.time?.match(/Day (\d+)/)?.[1] || a.time || '';
+                const dayB = b.time?.match(/Day (\d+)/)?.[1] || b.time || '';
+                return dayA.localeCompare(dayB);
+              })
+            };
+          })
+        };
+      });
+      
+      console.log('Processed course structure:', courses);
+      return courses;
     } catch (error) {
       console.error('Failed to fetch course structure:', error);
-      throw error;
+      // Return empty array in case of error
+      return [];
     }
   },
 

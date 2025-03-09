@@ -233,13 +233,10 @@ export default function Layout() {
     navigate('/login');
   };
 
-  const handleLessonClick = (lesson: Lesson) => {
-    if (activeLessonSession) {
-      navigate(`/lesson/${lesson.id}`);
-    } else {
-      setSelectedLessonToStart({ id: lesson.id, name: lesson.name });
-      setShowDurationDialog(true);
-    }
+  const handleLessonClick = (lesson: Lesson, course: Course, week: Week) => {
+    // When a lesson is clicked, directly open it with duration selection
+    setSelectedLessonToStart({ id: lesson.id, name: lesson.name });
+    setShowDurationDialog(true);
   };
 
   // Check if user has admin role
@@ -277,7 +274,6 @@ export default function Layout() {
 
     setShowDurationDialog(false);
     setSelectedDuration("");
-    setSelectedLessonToStart(null);
 
     // Set a timer to end the lesson
     const timer = setTimeout(() => {
@@ -293,6 +289,12 @@ export default function Layout() {
     }, duration * 60 * 1000);
 
     setLessonEndTimer(timer);
+    
+    // Navigate to the lesson page
+    navigate(`/lesson/${selectedLessonToStart.id}`);
+    
+    // Clear the selected lesson to start after navigation
+    setSelectedLessonToStart(null);
   };
 
   // Function to format duration
@@ -314,7 +316,7 @@ export default function Layout() {
           "flex items-center justify-between px-3 py-2 text-sm text-gray-600 hover:bg-gray-200 rounded-lg cursor-pointer",
           isActive && "bg-green-50"
         )}
-        onClick={() => handleLessonClick(lesson)}
+        onClick={() => handleLessonClick(lesson, course, week)}
       >
         <div className="flex items-center gap-2">
           <span className="font-medium">{lesson.name}</span>
@@ -380,280 +382,266 @@ export default function Layout() {
 
   return (
     <WebSocketProvider>
-      <div className="flex h-screen overflow-hidden bg-gradient-to-b from-secondary/30 to-white">
-        {/* Sidebar */}
-        <div
-          className={cn(
-            "h-screen transition-all duration-300 ease-in-out border-r border-primary/10 bg-white shadow-sm",
-            isSidebarCollapsed ? "w-16" : "w-64"
-          )}
-        >
-          {/* Logo and toggle button */}
-          <div className="flex items-center justify-between p-4 border-b border-primary/10">
+      <div className="flex h-screen bg-background">
+        {/* Main Sidebar */}
+        <div className={`h-screen ${isSidebarCollapsed ? 'w-20' : 'w-64'} bg-white border-r border-gray-200 flex flex-col transition-all duration-300 ease-in-out relative`}>
+          {/* Sidebar Header */}
+          <div className="p-4 flex items-center justify-between border-b border-gray-200">
             <Link to="/" className="flex items-center space-x-2">
-              <div className="relative">
-                <Brain className="h-6 w-6 text-primary" />
-                <Sparkles className="h-3 w-3 absolute -top-1 -right-1 text-yellow-300" />
-              </div>
-              {!isSidebarCollapsed && (
-                <span className="font-bold text-gradient-middle">AI School</span>
-              )}
+              <Brain className={`h-6 w-6 text-black ${isSidebarCollapsed ? 'mx-auto' : ''}`} />
+              {!isSidebarCollapsed && <span className="font-bold text-xl text-black">AI School</span>}
             </Link>
-            <Button
-              variant="ghost"
-              size="icon"
+            <button 
               onClick={toggleSidebar}
-              className="text-primary hover:bg-secondary/50"
+              className={`absolute -right-3 top-6 bg-white border rounded-full p-1.5 hover:bg-gray-100 transition-all duration-300 ${isSidebarCollapsed ? 'rotate-180' : ''}`}
             >
-              <ChevronLeft
-                className={cn(
-                  "h-4 w-4 transition-transform",
-                  isSidebarCollapsed && "rotate-180"
-                )}
-              />
-            </Button>
+              <ChevronLeft className="h-4 w-4 text-black" />
+            </button>
           </div>
 
-          {/* User info */}
-          <div className="p-4 border-b border-primary/10">
+          {/* User Info Section */}
+          <div className={`p-4 border-b border-gray-200 ${isSidebarCollapsed ? 'text-center' : ''}`}>
             {renderUserInfo()}
           </div>
 
+          {/* Active Users Section - Moved inside main sidebar */}
+          <div className="border-b border-gray-200">
+            <div className={`p-4 flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between'}`}>
+              <div className="flex items-center">
+                <Users className={`h-5 w-5 text-black ${isSidebarCollapsed ? '' : 'mr-2'}`} />
+                {!isSidebarCollapsed && <span className="font-semibold text-sm text-black">Active Users</span>}
+              </div>
+            </div>
+            <div className={`${isSidebarCollapsed ? 'px-2' : 'px-4'} pb-4 max-h-40 overflow-y-auto`}>
+              {/* Render active users here */}
+              <ActiveUsersSidebar collapsed={isSidebarCollapsed} />
+            </div>
+          </div>
+
           {/* Navigation */}
-          <div className="p-2 space-y-1">
-            <NavItem
-              to="/chat"
-              icon={MessageSquare}
-              collapsed={isSidebarCollapsed}
-            >
-              AI Chat
-            </NavItem>
-            
-            <NavItem
-              to="/group-chat"
-              icon={Users}
-              collapsed={isSidebarCollapsed}
-            >
-              Group Chat
-            </NavItem>
+          <nav className="flex-1 overflow-y-auto px-2 py-4">
+            <div className="space-y-1">
+              {/* AI Chat */}
+              <NavItem to="/chat" icon={MessageSquare} collapsed={isSidebarCollapsed}>
+                AI Chat
+              </NavItem>
 
-            {/* Curriculum section */}
-            <div className="pt-4">
-              <Button
-                variant="ghost"
-                className={cn(
-                  "w-full justify-start font-medium text-primary/80 hover:bg-secondary/50",
-                  isCurriculumOpen && "bg-secondary/50"
-                )}
-                onClick={() => setIsCurriculumOpen(!isCurriculumOpen)}
-              >
-                <div className="flex items-center">
-                  <BookOpen
-                    className={cn(
-                      "h-4 w-4",
-                      !isSidebarCollapsed && "mr-2"
-                    )}
-                  />
+              {/* Curriculum Section - Restructured */}
+              <div>
+                <button
+                  onClick={() => setIsCurriculumOpen(!isCurriculumOpen)}
+                  className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between'} px-3 py-2 text-sm rounded-lg hover:bg-gray-100 transition-colors`}
+                >
+                  <div className="flex items-center">
+                    <BookOpen className={`h-5 w-5 text-black ${isSidebarCollapsed ? '' : 'mr-2'}`} />
+                    {!isSidebarCollapsed && <span className="text-black">Curriculum</span>}
+                  </div>
                   {!isSidebarCollapsed && (
-                    <>
-                      <span>Curriculum</span>
-                      <ChevronDown
-                        className={cn(
-                          "ml-auto h-4 w-4 transition-transform",
-                          isCurriculumOpen && "rotate-180"
-                        )}
-                      />
-                    </>
+                    <ChevronDown
+                      className={`h-4 w-4 text-black transition-transform ${
+                        isCurriculumOpen ? "transform rotate-180" : ""
+                      }`}
+                    />
                   )}
-                </div>
-              </Button>
+                </button>
 
-              {/* Curriculum content */}
-              {isCurriculumOpen && !isSidebarCollapsed && (
-                <div className="mt-1 ml-2 space-y-1">
-                  {/* Courses */}
-                  {courses.map((course) => (
-                    <Collapsible
-                      key={course.id}
-                      open={openCourses.includes(course.id)}
-                      onOpenChange={() => toggleCourse(course.id)}
-                    >
-                      <CollapsibleTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="w-full justify-between font-normal text-primary/70 hover:bg-secondary/50"
-                        >
-                          <span>{course.name}</span>
-                          <ChevronDown
-                            className={cn(
-                              "h-4 w-4 transition-transform",
-                              openCourses.includes(course.id) && "rotate-180"
+                {isCurriculumOpen && (
+                  <div className={`mt-1 ${isSidebarCollapsed ? 'px-1' : 'pl-6'} space-y-1`}>
+                    {isLoading ? (
+                      <div className="flex justify-center py-2">
+                        <span className="text-sm text-gray-500">Loading...</span>
+                      </div>
+                    ) : courses.length === 0 ? (
+                      <div className="text-sm text-gray-500 py-2">
+                        No courses available
+                      </div>
+                    ) : (
+                      courses.map((course) => (
+                        <div key={course.id} className="space-y-1">
+                          <button
+                            onClick={() => toggleCourse(course.id)}
+                            className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-1' : 'justify-between px-3'} py-2 text-sm rounded-lg hover:bg-gray-100 transition-colors`}
+                          >
+                            <span className={`text-black ${isSidebarCollapsed ? 'sr-only' : ''}`}>
+                              {course.name}
+                            </span>
+                            {!isSidebarCollapsed && (
+                              <ChevronDown
+                                className={`h-4 w-4 text-black transition-transform ${
+                                  openCourses.includes(course.id) ? "transform rotate-180" : ""
+                                }`}
+                              />
                             )}
-                          />
-                        </Button>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent>
-                        <div className="ml-2 space-y-1">
-                          {/* Weeks */}
-                          {course.weeks.map((week) => (
-                            <Collapsible
-                              key={week.id}
-                              open={openWeeks.includes(week.id)}
-                              onOpenChange={() => toggleWeek(week.id)}
-                            >
-                              <CollapsibleTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="w-full justify-between font-normal text-primary/70 hover:bg-secondary/50"
-                                >
-                                  <span>{week.name}</span>
-                                  <ChevronDown
-                                    className={cn(
-                                      "h-4 w-4 transition-transform",
-                                      openWeeks.includes(week.id) && "rotate-180"
+                          </button>
+
+                          {openCourses.includes(course.id) && (
+                            <div className={`space-y-1 ${isSidebarCollapsed ? 'px-0' : 'pl-3'}`}>
+                              {course.weeks.map((week) => (
+                                <div key={week.id} className="space-y-1">
+                                  <button
+                                    onClick={() => toggleWeek(week.id)}
+                                    className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-1' : 'justify-between px-3'} py-2 text-sm rounded-lg hover:bg-gray-100 transition-colors`}
+                                  >
+                                    <span className={`text-black ${isSidebarCollapsed ? 'sr-only' : ''}`}>
+                                      {week.name}
+                                    </span>
+                                    {!isSidebarCollapsed && (
+                                      <ChevronDown
+                                        className={`h-4 w-4 text-black transition-transform ${
+                                          openWeeks.includes(week.id) ? "transform rotate-180" : ""
+                                        }`}
+                                      />
                                     )}
-                                  />
-                                </Button>
-                              </CollapsibleTrigger>
-                              <CollapsibleContent>
-                                <div className="ml-2 space-y-1">
-                                  {/* Lessons */}
-                                  {week.lessons.map((lesson) => (
-                                    <Button
-                                      key={lesson.id}
-                                      variant="ghost"
-                                      size="sm"
-                                      className={cn(
-                                        "w-full justify-start font-normal text-primary/70 hover:bg-secondary/50",
-                                        completedLessons.includes(lesson.id) &&
-                                          "line-through opacity-70",
-                                        activeLesson?.id === lesson.id &&
-                                          "bg-secondary/50 font-medium"
-                                      )}
-                                      onClick={() =>
-                                        handleLessonClick({
-                                          id: lesson.id,
-                                          name: lesson.name,
-                                        })
-                                      }
-                                    >
-                                      <div className="flex items-center w-full">
-                                        <span className="truncate">
-                                          {lesson.name}
-                                        </span>
-                                        {completedLessons.includes(
-                                          lesson.id
-                                        ) && (
-                                          <Check className="ml-auto h-4 w-4 text-green-500" />
-                                        )}
-                                        {lesson.isActive && (
-                                          <div className="ml-auto flex items-center">
-                                            <div className="h-2 w-2 rounded-full bg-green-500 mr-1"></div>
-                                            <span className="text-xs text-green-600">
-                                              Live
+                                  </button>
+
+                                  {openWeeks.includes(week.id) && (
+                                    <div className={`space-y-1 ${isSidebarCollapsed ? 'px-0' : 'pl-3'}`}>
+                                      {week.lessons.map((lesson) => (
+                                        <button
+                                          key={lesson.id}
+                                          onClick={() => handleLessonClick(lesson, course, week)}
+                                          className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center px-1' : 'px-3'} py-2 text-sm rounded-lg hover:bg-gray-100 transition-colors ${
+                                            activeLesson?.id === lesson.id ? 'bg-gray-100' : ''
+                                          }`}
+                                        >
+                                          <div className="flex items-center">
+                                            {completedLessons.includes(lesson.id) ? (
+                                              <Check className="h-4 w-4 text-black mr-2" />
+                                            ) : (
+                                              <div className="h-4 w-4 mr-2" />
+                                            )}
+                                            <span className={`text-black ${isSidebarCollapsed ? 'sr-only' : ''}`}>
+                                              {lesson.name}
                                             </span>
                                           </div>
-                                        )}
-                                      </div>
-                                    </Button>
-                                  ))}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
                                 </div>
-                              </CollapsibleContent>
-                            </Collapsible>
-                          ))}
+                              ))}
+                            </div>
+                          )}
                         </div>
-                      </CollapsibleContent>
-                    </Collapsible>
-                  ))}
-                </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Group Chat */}
+              <NavItem to="/group-chat" icon={Users} collapsed={isSidebarCollapsed}>
+                Group Chat
+              </NavItem>
+
+              {/* Challenges */}
+              <NavItem to="/challenges" icon={Code} collapsed={isSidebarCollapsed}>
+                Challenges
+              </NavItem>
+
+              {/* Quizzes */}
+              <NavItem to="/quizzes" icon={CheckSquare} collapsed={isSidebarCollapsed}>
+                Quizzes
+              </NavItem>
+
+              {/* Admin Panel - Only visible to admins */}
+              {isAdmin && (
+                <NavItem to="/admin" icon={Settings} collapsed={isSidebarCollapsed}>
+                  Admin Panel
+                </NavItem>
               )}
             </div>
+          </nav>
 
-            <NavItem
-              to="/lessons"
-              icon={BookOpen}
-              collapsed={isSidebarCollapsed}
-            >
-              Lessons
-            </NavItem>
-            
-            <NavItem
-              to="/challenges"
-              icon={Code}
-              collapsed={isSidebarCollapsed}
-            >
-              Challenges
-            </NavItem>
-            
-            <NavItem
-              to="/quizzes"
-              icon={CheckSquare}
-              collapsed={isSidebarCollapsed}
-            >
-              Quizzes
-            </NavItem>
-          </div>
-
-          {/* Sign out button */}
-          <div className="absolute bottom-4 left-0 right-0 px-4">
-            <Button
-              variant="ghost"
-              className="w-full justify-start text-red-600 hover:bg-red-50 hover:text-red-700"
+          {/* Logout Button */}
+          <div className="p-4 border-t border-gray-200">
+            <button
               onClick={handleSignOut}
+              className={`w-full flex items-center ${isSidebarCollapsed ? 'justify-center' : ''} px-3 py-2 text-sm rounded-lg text-red-500 hover:bg-red-50 transition-colors`}
             >
-              <LogOut className={cn("h-4 w-4", !isSidebarCollapsed && "mr-2")} />
+              <LogOut className={`h-5 w-5 ${isSidebarCollapsed ? '' : 'mr-2'}`} />
               {!isSidebarCollapsed && <span>Sign Out</span>}
-            </Button>
+            </button>
           </div>
         </div>
 
-        {/* Main content */}
-        <div className="flex-1 overflow-auto">
-          <Outlet />
+        {/* Main Content */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Lesson Timer Bar - Only shown when a lesson is active */}
+          {activeLessonSession && activeLesson && (
+            <div className="bg-gray-100 border-b border-gray-200 px-4 py-2 flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="flex items-center space-x-2">
+                  <Clock className="h-4 w-4 text-black" />
+                  <span className="text-sm font-medium text-black">
+                    {formatDuration(new Date(activeLessonSession.startTime))}
+                  </span>
+                </div>
+                <div className="h-4 w-px bg-gray-300" />
+                <span className="text-sm font-medium text-black">
+                  {activeLesson.name}
+                </span>
+              </div>
+              <button
+                onClick={() => {
+                  // End the lesson session
+                  setActiveLessonSession(null);
+                  setActiveLesson(null);
+                  if (lessonEndTimer) {
+                    clearTimeout(lessonEndTimer);
+                    setLessonEndTimer(null);
+                  }
+                }}
+                className="flex items-center space-x-1 text-sm text-red-500 hover:text-red-700"
+              >
+                <Square className="h-4 w-4" />
+                <span>End Lesson</span>
+              </button>
+            </div>
+          )}
+
+          {/* Content Area */}
+          <div className="flex-1 overflow-auto">
+            <Outlet />
+          </div>
         </div>
 
-        {/* Active users sidebar */}
-        <ActiveUsersSidebar />
-      </div>
+        {/* Notifications */}
+        {showNotification && notificationData && (
+          <NotificationDialog
+            type="start"
+            data={{
+              lessonName: notificationData.lessonName,
+              duration: notificationData.duration,
+            }}
+            open={showNotification}
+            onOpenChange={setShowNotification}
+          />
+        )}
 
-      {/* Notification dialogs */}
-      <NotificationDialog
-        type="start"
-        data={{
-          lessonName: notificationData?.lessonName || "",
-          duration: notificationData?.duration,
-        }}
-        open={showNotification}
-        onOpenChange={setShowNotification}
-      />
+        {showEndNotification && endNotificationData && (
+          <NotificationDialog
+            type="end"
+            data={{
+              lessonName: endNotificationData.lessonName,
+            }}
+            open={showEndNotification}
+            onOpenChange={setShowEndNotification}
+          />
+        )}
 
-      <NotificationDialog
-        type="end"
-        data={{
-          lessonName: endNotificationData?.lessonName || "",
-        }}
-        open={showEndNotification}
-        onOpenChange={setShowEndNotification}
-      />
-
-      {/* Duration selection dialog */}
-      <Dialog open={showDurationDialog} onOpenChange={setShowDurationDialog}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Set Lesson Duration</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="space-y-2">
-              <p className="text-sm font-medium">
-                How long would you like the lesson to run?
+        {/* Duration Selection Dialog */}
+        <Dialog open={showDurationDialog} onOpenChange={setShowDurationDialog}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-black">Select Lesson Duration</DialogTitle>
+            </DialogHeader>
+            <div className="p-4">
+              <p className="text-sm text-gray-600 mb-4">
+                How long would you like to study {selectedLessonToStart?.name}?
               </p>
-              <Select
-                value={selectedDuration}
-                onValueChange={setSelectedDuration}
-              >
-                <SelectTrigger>
+              <Select value={selectedDuration} onValueChange={setSelectedDuration}>
+                <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select duration" />
                 </SelectTrigger>
                 <SelectContent>
@@ -666,38 +654,46 @@ export default function Layout() {
                 </SelectContent>
               </Select>
             </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDurationDialog(false)}>
-              Cancel
-            </Button>
-            <Button onClick={startLesson} disabled={!selectedDuration}>
-              Start Lesson
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setShowDurationDialog(false)}
+                className="border-gray-300 text-black"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={startLesson}
+                disabled={!selectedDuration || !selectedLessonToStart}
+                className="bg-black text-white hover:bg-gray-800"
+              >
+                Start Lesson
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
     </WebSocketProvider>
   );
 }
 
-// Navigation item component
 function NavItem({ to, icon: Icon, children, collapsed }) {
   const location = useLocation();
   const isActive = location.pathname === to;
 
   return (
-    <Link to={to}>
-      <Button
-        variant="ghost"
-        className={cn(
-          "w-full justify-start font-medium text-primary/80 hover:bg-secondary/50",
-          isActive && "bg-secondary/50"
-        )}
-      >
-        <Icon className={cn("h-4 w-4", !collapsed && "mr-2")} />
-        {!collapsed && <span>{children}</span>}
-      </Button>
+    <Link
+      to={to}
+      className={`flex items-center ${
+        collapsed ? "justify-center" : ""
+      } px-3 py-2 text-sm rounded-lg transition-colors ${
+        isActive
+          ? "bg-gray-100 text-black font-medium"
+          : "text-gray-600 hover:bg-gray-100 hover:text-black"
+      }`}
+    >
+      <Icon className={`h-5 w-5 ${collapsed ? "" : "mr-2"}`} />
+      {!collapsed && <span>{children}</span>}
     </Link>
   );
 }

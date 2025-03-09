@@ -1,7 +1,7 @@
 import os
 import json
 import fitz  # PyMuPDF
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Response
 import requests
 import pymysql
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,6 +9,8 @@ from dotenv import load_dotenv
 from openai import OpenAI
 import string
 import re
+from fastapi.responses import FileResponse
+from pathlib import Path
 
 # Load environment variables from .env file
 load_dotenv()
@@ -56,13 +58,13 @@ except Exception as e:
 # Initialize FastAPI app
 app = FastAPI()
 
-# Add CORS middleware
+# Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=["http://localhost:5174", "http://localhost:5173"],  # Specific origins instead of wildcard
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["*"],  # Allow all methods
+    allow_headers=["*"],  # Allow all headers
 )
 
 # Keep track of connected WebSockets
@@ -100,18 +102,22 @@ def clean_text(text):
     return ' '.join(words)
 
 def get_db_connection():
-    """Create and return a database connection"""
+    """Get a connection to the database"""
     try:
+        # Create a connection to the database
         connection = pymysql.connect(
             host=DB_HOST,
             user=DB_USER,
             password=DB_PASSWORD,
             database=DB_NAME,
+            charset='utf8mb4',
             cursorclass=pymysql.cursors.DictCursor
         )
+        
+        print(f"Successfully connected to database {DB_NAME}")
         return connection
     except Exception as e:
-        print(f"Database connection error: {e}")
+        print(f"Error connecting to database: {e}")
         return None
 
 def get_lesson_info(lesson_id):
@@ -119,116 +125,143 @@ def get_lesson_info(lesson_id):
     try:
         # Connect to the database
         conn = get_db_connection()
-        cursor = conn.cursor()
+        if not conn:
+            print("Failed to connect to database")
+            return get_mock_lesson_content(lesson_id)
+            
+        cursor = conn.cursor()  # Use DictCursor to get results as dictionaries
         
-        # Query to get lesson information
+        # Query to get lesson information based on the actual schema
         query = """
-        SELECT l.id, l.title, l.description, l.content, l.pdf_path, c.name as course_name, w.name as week_name
+        SELECT 
+            l.id, l.lesson_name, l.file_path, 
+            l.course_id, c.name as course_name,
+            l.week_id, w.name as week_name,
+            l.day_id, d.name as day_name
         FROM lessons l
+        JOIN courses c ON l.course_id = c.id
         JOIN weeks w ON l.week_id = w.id
-        JOIN courses c ON w.course_id = c.id
-        WHERE l.id = ?
+        JOIN days d ON l.day_id = d.id
+        WHERE l.id = %s
         """
         
-        cursor.execute(query, (lesson_id,))
-        lesson = cursor.fetchone()
-        
-        if lesson:
-            # Convert to dictionary
-            lesson_dict = {
-                "id": lesson[0],
-                "title": lesson[1],
-                "description": lesson[2],
-                "content": lesson[3],
-                "pdf_path": lesson[4],
-                "course_name": lesson[5],
-                "week_name": lesson[6]
-            }
+        try:
+            cursor.execute(query, (lesson_id,))
+            lesson = cursor.fetchone()
             
-            # Close connection
+            cursor.close()
             conn.close()
             
-            return lesson_dict
-        else:
-            # If lesson not found in database, return mock data
+            if lesson:
+                # Try to extract text from PDF if file_path exists
+                content = ""
+                if lesson["file_path"] and os.path.exists(lesson["file_path"]):
+                    content = extract_text_from_pdf(lesson["file_path"])
+                else:
+                    content = f"No content available for lesson {lesson_id}"
+                
+                # Return lesson info
+                return {
+                    "id": lesson["id"],
+                    "title": lesson["lesson_name"],
+                    "course_name": lesson["course_name"],
+                    "week_name": lesson["week_name"],
+                    "day_name": lesson["day_name"],
+                    "file_path": lesson["file_path"],
+                    "content": content
+                }
+            else:
+                # If lesson not found in database, return mock data
+                print(f"Lesson {lesson_id} not found in database")
+                return get_mock_lesson_content(lesson_id)
+        except Exception as e:
+            cursor.close()
             conn.close()
+            print(f"Database query error: {e}")
             return get_mock_lesson_content(lesson_id)
             
     except Exception as e:
-        print(f"Database error: {e}")
+        print(f"Failed to get lesson information: {e}")
         # If there's an error, return mock data
         return get_mock_lesson_content(lesson_id)
 
 def get_mock_lesson_content(lesson_id):
-    """Return mock lesson content for development"""
-    # For lesson ID 1, return Deep Learning content
-    if lesson_id == "1" or lesson_id.lower() == "deep_learning":
-        # Create a path to the PDF file
-        pdf_path = os.path.join(os.path.dirname(__file__), "pdfs", "deep_learning.pdf")
-        
-        # Check if the PDF exists, if not create a simple one
-        if not os.path.exists(pdf_path):
-            try:
-                # Create the directory if it doesn't exist
-                os.makedirs(os.path.dirname(pdf_path), exist_ok=True)
-                
-                # Create a simple PDF with the content
-                from reportlab.lib.pagesizes import letter
-                from reportlab.pdfgen import canvas
-                
-                c = canvas.Canvas(pdf_path, pagesize=letter)
-                c.setFont("Helvetica", 16)
-                c.drawString(72, 750, "Introduction to Deep Learning")
-                
-                c.setFont("Helvetica", 12)
-                c.drawString(72, 720, "What is Deep Learning?")
-                c.drawString(72, 700, "Deep learning is a subset of machine learning that uses neural networks with multiple layers")
-                c.drawString(72, 680, "(deep neural networks) to analyze various factors of data.")
-                
-                c.drawString(72, 650, "Key characteristics of deep learning:")
-                c.drawString(90, 630, "- Uses neural networks with many layers (hence 'deep')")
-                c.drawString(90, 610, "- Can automatically discover features from raw data")
-                c.drawString(90, 590, "- Excels at processing unstructured data like images, text, and audio")
-                c.drawString(90, 570, "- Requires large amounts of data and computational power")
-                c.drawString(90, 550, "- Has achieved state-of-the-art results in many domains")
-                
-                c.save()
-                print(f"Created PDF file at {pdf_path}")
-            except Exception as e:
-                print(f"Error creating PDF: {e}")
-                pdf_path = None
-        
-        return {
-            "id": "1",
+    """Get mock lesson content for testing"""
+    lesson_id_int = int(lesson_id) if lesson_id.isdigit() else 1
+    
+    # Sample lesson data
+    lessons = {
+        1: {
+            "id": 1,
             "title": "Introduction to Deep Learning",
-            "description": "Learn the fundamentals of deep learning and neural networks",
-            "content": """# Introduction to Deep Learning
-
-## What is Deep Learning?
-
-Deep learning is a subset of machine learning that uses neural networks with multiple layers (deep neural networks) to analyze various factors of data.
-
-Key characteristics of deep learning:
-- Uses neural networks with many layers (hence "deep")
-- Can automatically discover features from raw data
-- Excels at processing unstructured data like images, text, and audio
-- Requires large amounts of data and computational power
-- Has achieved state-of-the-art results in many domains""",
-            "pdf_path": pdf_path,
-            "course_name": "AI Fundamentals",
-            "week_name": "Week 1"
+            "course_name": "Deep Learning",
+            "week_name": "Week 1",
+            "day_name": "Monday",
+            "file_path": "backend/python/pdfs/lesson_1.pdf",
+            "content": """
+            Deep Learning is a subset of machine learning that uses neural networks with multiple layers.
+            
+            Key concepts include:
+            1. Neural Networks
+            2. Backpropagation
+            3. Activation Functions
+            4. Training and Testing
+            
+            Neural networks are inspired by the human brain and consist of interconnected nodes (neurons).
+            Each connection has a weight that determines its importance.
+            """
+        },
+        2: {
+            "id": 2,
+            "title": "Neural Networks Basics",
+            "course_name": "Deep Learning",
+            "week_name": "Week 1",
+            "day_name": "Tuesday",
+            "file_path": "backend/python/pdfs/lesson_2.pdf",
+            "content": """
+            Neural Networks Basics
+            
+            A neural network consists of:
+            - Input layer
+            - Hidden layers
+            - Output layer
+            
+            Each neuron applies an activation function to the weighted sum of its inputs.
+            Common activation functions include ReLU, sigmoid, and tanh.
+            """
+        },
+        3: {
+            "id": 3,
+            "title": "Convolutional Neural Networks",
+            "course_name": "Deep Learning",
+            "week_name": "Week 1",
+            "day_name": "Wednesday",
+            "file_path": "backend/python/pdfs/lesson_3.pdf",
+            "content": """
+            Convolutional Neural Networks (CNNs)
+            
+            CNNs are specialized neural networks for processing grid-like data such as images.
+            
+            Key components:
+            - Convolutional layers
+            - Pooling layers
+            - Fully connected layers
+            
+            CNNs use filters to detect features in the input data.
+            """
         }
-    # For other lesson IDs, return generic content
-    else:
-        return {
-            "id": lesson_id,
-            "title": f"Lesson {lesson_id}",
-            "description": f"This is lesson {lesson_id}",
-            "content": f"Content for lesson {lesson_id}",
-            "pdf_path": None,
-            "course_name": "Course",
-            "week_name": "Week"
-        }
+    }
+    
+    # Return the lesson if it exists, otherwise return a default lesson
+    return lessons.get(lesson_id_int, {
+        "id": lesson_id_int,
+        "title": f"Lesson {lesson_id}",
+        "course_name": "Sample Course",
+        "week_name": "Sample Week",
+        "day_name": "Sample Day",
+        "file_path": f"backend/python/pdfs/lesson_{lesson_id}.pdf",
+        "content": f"This is sample content for lesson {lesson_id}."
+    })
 
 def extract_text_from_pdf(file_path):
     """Extract text from a PDF file"""
@@ -483,11 +516,60 @@ async def websocket_endpoint(websocket: WebSocket):
                     await websocket.send_text(json.dumps(error_msg))
                     continue
                 
-                # Get response from Grok
-                response = chat_with_grok(question, lesson_info)
+                # Extract lesson content
+                lesson_content = lesson_info.get("content", "")
+                lesson_title = lesson_info.get("title", f"Lesson {lesson_id}")
+                
+                # Try to use Grok API if available
+                if client:
+                    try:
+                        # Create a prompt with the lesson content and question
+                        prompt = f"""
+                        You are an AI teaching assistant for the lesson: "{lesson_title}".
+                        
+                        Here is the lesson content:
+                        {lesson_content}
+                        
+                        Please answer the following question based on the lesson content.
+                        If the question is not related to the lesson content, politely explain that you can only answer questions about this specific lesson.
+                        
+                        Question: {question}
+                        """
+                        
+                        # Call the Grok API
+                        response = client.chat.completions.create(
+                            model="grok-1",
+                            messages=[
+                                {"role": "system", "content": "You are a helpful AI teaching assistant."},
+                                {"role": "user", "content": prompt}
+                            ],
+                            temperature=0.7,
+                            max_tokens=500
+                        )
+                        
+                        # Extract the response
+                        ai_response = response.choices[0].message.content
+                        
+                        # Send response back to client
+                        await websocket.send_text(json.dumps({"response": ai_response}))
+                        continue
+                    except Exception as e:
+                        print(f"Error using Grok API: {e}")
+                        # Fall back to simple response if API fails
+                
+                # If Grok API is not available or fails, use a simple response
+                simple_response = f"""Based on the lesson '{lesson_title}', I can provide the following information:
+
+This lesson covers topics related to {lesson_title}.
+
+Regarding your question: "{question}"
+
+The lesson content includes information about {lesson_content[:150]}...
+
+I hope this helps! Feel free to ask more specific questions about the lesson content."""
                 
                 # Send response back to client
-                await websocket.send_text(json.dumps({"response": response}))
+                await websocket.send_text(json.dumps({"response": simple_response}))
                 
             except Exception as e:
                 print(f"Error processing message: {e}")
@@ -515,7 +597,269 @@ async def health_check():
         "grok_api": api_status
     }
 
+# Add endpoints for lesson content and PDF download
+@app.get("/api/lessons/{lesson_id}/content")
+async def get_lesson_content(lesson_id: str):
+    """Get lesson content by ID"""
+    try:
+        # Get lesson info
+        lesson_info = get_lesson_info(lesson_id)
+        
+        # Check if there was an error getting lesson info
+        if isinstance(lesson_info, str) and lesson_info.startswith("Error:"):
+            return {"error": lesson_info}
+        
+        # Return lesson content
+        return {
+            "id": lesson_id,
+            "title": f"Lesson {lesson_id}",
+            "content": lesson_info
+        }
+    except Exception as e:
+        print(f"Error getting lesson content: {e}")
+        return {"error": f"Failed to get lesson content: {str(e)}"}
+
+@app.get("/api/lessons/{lesson_id}/download")
+async def download_lesson_file(lesson_id: str):
+    """Download lesson file"""
+    try:
+        # First try to get the lesson from the database
+        try:
+            conn = get_db_connection()
+            if not conn:
+                print("Failed to connect to database")
+                raise Exception("Database connection failed")
+                
+            cursor = conn.cursor()
+            
+            # Query to get the file path
+            query = "SELECT file_path FROM lessons WHERE id = %s"
+            cursor.execute(query, (lesson_id,))
+            result = cursor.fetchone()
+            
+            cursor.close()
+            conn.close()
+            
+            if result and result["file_path"]:
+                file_path = result["file_path"]
+                # Check if the file exists
+                if os.path.exists(file_path):
+                    print(f"Serving PDF from database path: {file_path}")
+                    return FileResponse(
+                        path=file_path,
+                        media_type="application/pdf",
+                        filename=f"lesson_{lesson_id}.pdf"
+                    )
+                else:
+                    print(f"File not found at path: {file_path}")
+        except Exception as e:
+            print(f"Database error when fetching file path: {e}")
+        
+        # If we get here, either the lesson wasn't found or the file doesn't exist
+        # Check if we have a PDF for this lesson in our pdfs directory
+        pdf_path = Path(f"backend/python/pdfs/lesson_{lesson_id}.pdf")
+        
+        # If the PDF doesn't exist, create a sample PDF
+        if not pdf_path.exists():
+            print(f"Creating sample PDF for lesson {lesson_id}")
+            # Create a simple PDF with PyMuPDF
+            doc = fitz.open()
+            
+            # Add a title page
+            page = doc.new_page()
+            title_text = f"Lesson {lesson_id}: Deep Learning Fundamentals"
+            page.insert_text((50, 50), title_text, fontsize=24, color=(0, 0, 0))
+            page.insert_text((50, 100), "AI School", fontsize=18, color=(0, 0, 0))
+            
+            # Add content pages
+            page = doc.new_page()
+            content_text = """
+            Introduction to Deep Learning
+            
+            Deep Learning is a subset of machine learning that uses neural networks with multiple layers.
+            
+            Key concepts include:
+            1. Neural Networks
+            2. Backpropagation
+            3. Activation Functions
+            4. Training and Testing
+            
+            Neural networks are inspired by the human brain and consist of interconnected nodes (neurons).
+            Each connection has a weight that determines its importance.
+            """
+            page.insert_text((50, 50), content_text, fontsize=12, color=(0, 0, 0))
+            
+            # Add another page with more content
+            page = doc.new_page()
+            more_content = """
+            Types of Neural Networks:
+            
+            1. Feedforward Neural Networks
+            2. Convolutional Neural Networks (CNNs)
+            3. Recurrent Neural Networks (RNNs)
+            4. Transformers
+            
+            Applications of Deep Learning:
+            
+            - Computer Vision
+            - Natural Language Processing
+            - Speech Recognition
+            - Recommendation Systems
+            """
+            page.insert_text((50, 50), more_content, fontsize=12, color=(0, 0, 0))
+            
+            # Save the PDF
+            os.makedirs(pdf_path.parent, exist_ok=True)
+            doc.save(str(pdf_path))
+            doc.close()
+            
+            print(f"Created sample PDF at {pdf_path}")
+        else:
+            print(f"Serving existing sample PDF from {pdf_path}")
+        
+        # Return the PDF file
+        return FileResponse(
+            path=pdf_path,
+            media_type="application/pdf",
+            filename=f"lesson_{lesson_id}.pdf"
+        )
+    except Exception as e:
+        print(f"Error downloading lesson file: {e}")
+        return {"error": f"Failed to download lesson file: {str(e)}"}
+
+# Add endpoint to fetch all lessons
+@app.get("/api/lessons")
+async def get_all_lessons():
+    """Get all lessons with their course, week, and day information"""
+    try:
+        # Connect to the database
+        conn = get_db_connection()
+        if not conn:
+            print("Failed to connect to database")
+            # Return sample data if database connection fails
+            return {
+                "status": "error",
+                "message": "Database connection failed",
+                "data": get_sample_lessons()
+            }
+            
+        cursor = conn.cursor(pymysql.cursors.DictCursor)  # Use DictCursor to get results as dictionaries
+        
+        # Query to get all lessons with their course, week, and day information
+        query = """
+        SELECT 
+            l.id, l.lesson_name, l.file_path, 
+            l.course_id, c.name as course_name,
+            l.week_id, w.name as week_name,
+            l.day_id, d.name as day_name
+        FROM lessons l
+        JOIN courses c ON l.course_id = c.id
+        JOIN weeks w ON l.week_id = w.id
+        JOIN days d ON l.day_id = d.id
+        ORDER BY c.id, w.id, d.id, l.id
+        """
+        
+        try:
+            cursor.execute(query)
+            lessons = cursor.fetchall()
+            
+            cursor.close()
+            conn.close()
+            
+            if not lessons:
+                print("No lessons found in database")
+                # If no lessons found, return sample data
+                return {
+                    "status": "success",
+                    "message": "Sample data returned",
+                    "data": get_sample_lessons()
+                }
+            
+            # Return the lessons
+            return {
+                "status": "success",
+                "message": "Lessons retrieved successfully",
+                "data": lessons
+            }
+        except Exception as e:
+            cursor.close()
+            conn.close()
+            print(f"Database query error: {e}")
+            return {
+                "status": "error",
+                "message": f"Database query error: {str(e)}",
+                "data": get_sample_lessons()
+            }
+    except Exception as e:
+        print(f"Error getting all lessons: {e}")
+        # Return sample data in case of error
+        return {
+            "status": "error",
+            "message": f"Failed to get lessons: {str(e)}",
+            "data": get_sample_lessons()
+        }
+
+def get_sample_lessons():
+    """Return sample lesson data for testing"""
+    return [
+        {
+            "id": 1,
+            "lesson_name": "Introduction to Deep Learning",
+            "file_path": "backend/python/pdfs/lesson_1.pdf",
+            "course_id": 1,
+            "course_name": "Deep Learning",
+            "week_id": 1,
+            "week_name": "Week 1",
+            "day_id": 1,
+            "day_name": "Monday"
+        },
+        {
+            "id": 2,
+            "lesson_name": "Neural Networks Basics",
+            "file_path": "backend/python/pdfs/lesson_2.pdf",
+            "course_id": 1,
+            "course_name": "Deep Learning",
+            "week_id": 1,
+            "week_name": "Week 1",
+            "day_id": 2,
+            "day_name": "Tuesday"
+        },
+        {
+            "id": 3,
+            "lesson_name": "Convolutional Neural Networks",
+            "file_path": "backend/python/pdfs/lesson_3.pdf",
+            "course_id": 1,
+            "course_name": "Deep Learning",
+            "week_id": 1,
+            "week_name": "Week 1",
+            "day_id": 3,
+            "day_name": "Wednesday"
+        },
+        {
+            "id": 4,
+            "lesson_name": "Recurrent Neural Networks",
+            "file_path": "backend/python/pdfs/lesson_4.pdf",
+            "course_id": 1,
+            "course_name": "Deep Learning",
+            "week_id": 1,
+            "week_name": "Week 1",
+            "day_id": 4,
+            "day_name": "Thursday"
+        },
+        {
+            "id": 5,
+            "lesson_name": "Transformers",
+            "file_path": "backend/python/pdfs/lesson_5.pdf",
+            "course_id": 1,
+            "course_name": "Deep Learning",
+            "week_id": 1,
+            "week_name": "Week 1",
+            "day_id": 5,
+            "day_name": "Friday"
+        }
+    ]
+
 if __name__ == "__main__":
     import uvicorn
     print("Starting FastAPI server on http://localhost:8000")
-    uvicorn.run(app, host="0.0.0.0", port=8000) 
+    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info") 

@@ -10,7 +10,7 @@ async function checkDatabase() {
   // Log database configuration
   console.log('Database configuration:', {
     host: process.env.DB_HOST || 'localhost',
-    user: process.env.DB_USER || 'Sara',
+    user: process.env.DB_USER || 'root',
     database: process.env.DB_NAME || 'aischool',
     hasPassword: !!process.env.DB_PASSWORD
   });
@@ -21,8 +21,8 @@ async function checkDatabase() {
     // Connect to the database
     connection = await mysql.createConnection({
       host: process.env.DB_HOST || 'localhost',
-      user: process.env.DB_USER || 'Sara',
-      password: process.env.DB_PASSWORD || 'Sara0330!!',
+      user: process.env.DB_USER || 'root',
+      password: process.env.DB_PASSWORD || 'password',
       database: process.env.DB_NAME || 'aischool'
     });
     
