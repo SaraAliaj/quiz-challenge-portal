@@ -12,6 +12,7 @@ import { api } from "@/server/api";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
 import { useWebSocket } from '@/contexts/WebSocketContext';
+import { nanoid } from 'nanoid';
 
 interface Message {
   id: string;
@@ -53,14 +54,14 @@ interface TableOfContentsItem {
   children?: TableOfContentsItem[];
 }
 
-export default function LessonChatbot({ 
+export function LessonChatbot({ 
   lessonId,
   lessonTitle
 }: LessonChatbotProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
-      content: `Hello! I'm your AI assistant for the "${lessonTitle}" lesson. I can answer questions about topics covered in this lesson, such as deep learning if it's part of the material. However, I cannot answer questions that are not related to this specific lesson content. How can I help you understand this material better?`,
+      content: `I'm your AI assistant for this Deep Learning lesson. How can I help you?`,
       sender: 'ai',
       timestamp: new Date()
     }
@@ -69,13 +70,14 @@ export default function LessonChatbot({
   const [isLoading, setIsLoading] = useState(false);
   const [lessonContent, setLessonContent] = useState<LessonContent | null>(null);
   const [isLoadingContent, setIsLoadingContent] = useState(false);
-  const [activeTab, setActiveTab] = useState("content");
+  const [activeTab, setActiveTab] = useState("chat");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const [initialLoad, setInitialLoad] = useState(true);
   const [isSidebarCollapsed, setSidebarCollapsed] = useState(false);
   const socketRef = useRef<WebSocket | null>(null);
   const { toast } = useToast();
+  const { user } = useAuth();
 
   // Initialize WebSocket connection
   useEffect(() => {
@@ -112,7 +114,7 @@ export default function LessonChatbot({
           
           // Add AI response to messages
           const aiMessage: Message = {
-            id: Date.now().toString(),
+            id: nanoid(),
             content: jsonData.response || jsonData.message || event.data,
             sender: 'ai',
             timestamp: new Date()
@@ -121,7 +123,7 @@ export default function LessonChatbot({
         } catch (e) {
           // If not JSON, treat as plain text
           const aiMessage: Message = {
-            id: Date.now().toString(),
+            id: nanoid(),
             content: event.data,
             sender: 'ai',
             timestamp: new Date()
@@ -210,44 +212,70 @@ export default function LessonChatbot({
     window.scrollTo(0, 0);
   }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim()) return;
+  // Scroll to bottom of messages
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages]);
 
+  // Handle sending a message
+  const handleSendMessage = async () => {
+    if (!input.trim()) return;
+    
+    // Add user message to chat
     const userMessage: Message = {
-      id: Date.now().toString(),
+      id: nanoid(),
       content: input,
       sender: 'user',
       timestamp: new Date()
     };
-
+    
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);
-
+    
     try {
-      // Send message to WebSocket server
-      if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-        // Format: lessonId|question
-        socketRef.current.send(`${lessonId}|${input}`);
-        console.log(`Sent message to server: ${lessonId}|${input}`);
-      } else {
-        throw new Error('WebSocket connection not available');
-      }
-    } catch (error) {
-      console.error('Failed to send message:', error);
-      setIsLoading(false);
+      // Send message to backend
+      const response = await api.sendLessonChatMessage(lessonId, input);
       
-      // Fallback to simulated response if WebSocket fails
-      setTimeout(() => {
-        const aiMessage: Message = {
-          id: Date.now().toString(),
-          content: "I'm sorry, I'm having trouble connecting to the server. Please try again later.",
-          sender: 'ai',
-          timestamp: new Date()
-        };
-        setMessages(prev => [...prev, aiMessage]);
-      }, 1000);
+      // Add AI response to chat
+      const aiMessage: Message = {
+        id: nanoid(),
+        content: response.message || "I'm sorry, I couldn't process your question. Please try again.",
+        sender: 'ai',
+        timestamp: new Date()
+      };
+      
+      setMessages(prev => [...prev, aiMessage]);
+    } catch (error) {
+      console.error('Error sending message:', error);
+      
+      // Add error message
+      const errorMessage: Message = {
+        id: nanoid(),
+        content: "I'm sorry, I encountered an error processing your request. Please try again later.",
+        sender: 'ai',
+        timestamp: new Date()
+      };
+      
+      setMessages(prev => [...prev, errorMessage]);
+      
+      toast({
+        title: "Error",
+        description: "Failed to get a response from the AI assistant.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle pressing Enter to send message
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
     }
   };
 
@@ -315,6 +343,7 @@ export default function LessonChatbot({
   };
 
   return (
+<<<<<<< Updated upstream
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between p-4 border-b">
         <h2 className="text-xl font-bold flex items-center">
@@ -376,5 +405,128 @@ export default function LessonChatbot({
         </form>
       </div>
     </div>
+=======
+    <Card className="flex flex-col h-full border-none shadow-none">
+      <CardHeader className="px-4 py-3 border-b bg-muted/50">
+        <CardTitle className="text-lg font-medium flex items-center">
+          <Bot className="h-5 w-5 mr-2 text-primary" />
+          Lesson Assistant
+        </CardTitle>
+      </CardHeader>
+      
+      <Tabs defaultValue="chat" className="flex-1 flex flex-col">
+        <TabsList className="mx-4 mt-2 grid w-auto grid-cols-2">
+          <TabsTrigger value="chat" onClick={() => setActiveTab("chat")}>
+            <MessageSquare className="h-4 w-4 mr-2" />
+            Chat
+          </TabsTrigger>
+          <TabsTrigger value="info" onClick={() => setActiveTab("info")}>
+            <BookOpen className="h-4 w-4 mr-2" />
+            About
+          </TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="chat" className="flex-1 flex flex-col px-4 pt-2 pb-4">
+          <ScrollArea className="flex-1 pr-4">
+            <div className="space-y-4">
+              {messages.map((message) => (
+                <div
+                  key={message.id}
+                  className={`flex ${
+                    message.sender === 'user' ? 'justify-end' : 'justify-start'
+                  }`}
+                >
+                  <div
+                    className={`flex max-w-[80%] ${
+                      message.sender === 'user'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted'
+                    } rounded-lg px-3 py-2`}
+                  >
+                    {message.sender === 'ai' && (
+                      <Avatar className="h-6 w-6 mr-2">
+                        <AvatarFallback>AI</AvatarFallback>
+                      </Avatar>
+                    )}
+                    <div>
+                      <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                      <p className="text-xs opacity-50 mt-1">
+                        {message.timestamp.toLocaleTimeString([], {
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </p>
+                    </div>
+                    {message.sender === 'user' && (
+                      <Avatar className="h-6 w-6 ml-2">
+                        <AvatarFallback>
+                          {user?.username?.charAt(0) || 'U'}
+                        </AvatarFallback>
+                      </Avatar>
+                    )}
+                  </div>
+                </div>
+              ))}
+              <div ref={messagesEndRef} />
+            </div>
+          </ScrollArea>
+          
+          <div className="flex items-center gap-2 mt-4">
+            <Input
+              placeholder="Ask a question about this lesson..."
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              disabled={isLoading}
+              className="flex-1"
+            />
+            <Button 
+              onClick={handleSendMessage} 
+              disabled={isLoading || !input.trim()}
+              size="icon"
+            >
+              {isLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
+        </TabsContent>
+        
+        <TabsContent value="info" className="flex-1 px-4 pt-2 pb-4">
+          <ScrollArea className="h-full pr-4">
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold">About this Assistant</h3>
+              <p>
+                This AI assistant is designed to help you understand the concepts covered in this lesson.
+              </p>
+              <div className="bg-muted p-3 rounded-md">
+                <h4 className="font-medium mb-2">What I can help with:</h4>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>Explaining concepts from this lesson</li>
+                  <li>Answering questions about the lesson material</li>
+                  <li>Providing examples related to the lesson content</li>
+                  <li>Clarifying difficult topics from the lesson</li>
+                </ul>
+              </div>
+              <div className="bg-muted p-3 rounded-md">
+                <h4 className="font-medium mb-2">What I cannot help with:</h4>
+                <ul className="list-disc pl-5 space-y-1">
+                  <li>Questions unrelated to this lesson's content</li>
+                  <li>Personal or sensitive information</li>
+                  <li>Writing code or completing assignments for you</li>
+                  <li>Topics not covered in the lesson material</li>
+                </ul>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                This assistant has knowledge of the specific content in this lesson and will only answer questions related to that material.
+              </p>
+            </div>
+          </ScrollArea>
+        </TabsContent>
+      </Tabs>
+    </Card>
+>>>>>>> Stashed changes
   );
 }

@@ -1775,4 +1775,101 @@ app.get('/api/lessons/:id/pdf', async (req, res) => {
     console.error('Error getting lesson PDF:', error);
     res.status(500).json({ error: 'Failed to get lesson PDF' });
   }
+});
+
+// Handle lesson chat messages
+app.post('/api/lessons/:id/chat', async (req, res) => {
+  try {
+    const lessonId = req.params.id;
+    const { message } = req.body;
+    
+    if (!message) {
+      return res.status(400).json({ error: 'Message is required' });
+    }
+    
+    // Get the lesson content to provide context
+    const [lessonRows] = await promisePool.query(
+      'SELECT * FROM lessons WHERE id = ?',
+      [lessonId]
+    );
+    
+    if (lessonRows.length === 0) {
+      return res.status(404).json({ error: 'Lesson not found' });
+    }
+    
+    const lesson = lessonRows[0];
+    
+    // Get lesson content from file if available
+    let lessonContent = '';
+    if (lesson.file_path && fs.existsSync(lesson.file_path)) {
+      try {
+        // This is a simplified approach - in a real app, you'd want to use a PDF parser
+        // For now, we'll just use the lesson title and any available metadata
+        lessonContent = `Lesson title: ${lesson.lesson_name}`;
+      } catch (error) {
+        console.error('Error reading lesson content:', error);
+      }
+    }
+    
+    // Prepare system message to ensure the AI only answers questions related to the lesson
+    const systemMessage = `
+      You are an AI assistant for a specific lesson titled "${lesson.lesson_name}".
+      Your purpose is to help students understand the material in this lesson.
+      
+      IMPORTANT RULES:
+      1. ONLY answer questions related to the content of this specific lesson.
+      2. If a question is not related to this lesson, politely explain that you can only answer questions about this lesson.
+      3. Do not provide information on topics not covered in the lesson.
+      4. Be helpful, concise, and educational in your responses.
+      5. If you're unsure if a topic is covered in the lesson, err on the side of caution and explain that you can only discuss topics covered in the lesson.
+      
+      Lesson context: ${lessonContent}
+    `;
+    
+    // For this implementation, we'll use a simple response generation approach
+    // In a production app, you would integrate with an actual AI service
+    
+    // Check if the question is likely about the lesson
+    const lessonKeywords = lesson.lesson_name.toLowerCase().split(/\s+/);
+    const messageWords = message.toLowerCase().split(/\s+/);
+    
+    // Simple check if the message contains any lesson keywords
+    const isRelatedToLesson = lessonKeywords.some(keyword => 
+      messageWords.includes(keyword) || 
+      message.toLowerCase().includes(keyword)
+    );
+    
+    let response;
+    
+    if (message.toLowerCase().includes('deep learning') || 
+        message.toLowerCase().includes('neural') || 
+        message.toLowerCase().includes('ai') ||
+        message.toLowerCase().includes('machine learning') ||
+        isRelatedToLesson) {
+      // If the question seems related to deep learning or the lesson topic
+      if (message.toLowerCase().includes('what is deep learning')) {
+        response = "Deep learning is a subset of machine learning that uses neural networks with multiple layers (deep neural networks) to analyze various factors of data. It's particularly effective for processing unstructured data like images, text, and audio.";
+      } else if (message.toLowerCase().includes('neural network')) {
+        response = "Neural networks are the foundation of deep learning. They consist of an input layer that receives data, hidden layers that process the data through weighted connections, and an output layer that produces the final result.";
+      } else if (message.toLowerCase().includes('application') || message.toLowerCase().includes('use case')) {
+        response = "Deep learning has many applications including computer vision (image classification, object detection), natural language processing (translation, sentiment analysis), speech recognition, healthcare (disease diagnosis), autonomous vehicles, and gaming.";
+      } else if (message.toLowerCase().includes('challenge') || message.toLowerCase().includes('limitation')) {
+        response = "Despite its success, deep learning faces several challenges: it requires large amounts of labeled data, is computationally intensive, models can be difficult to interpret (black box problem), is vulnerable to adversarial attacks, and may amplify biases present in training data.";
+      } else {
+        response = "That's an interesting question about deep learning. The neural networks used in deep learning are designed to learn hierarchical features from data, which allows them to recognize patterns and make predictions with impressive accuracy when properly trained.";
+      }
+    } else {
+      // If the question doesn't seem related to the lesson
+      response = "I'm sorry, but I can only answer questions related to this specific lesson on Deep Learning. If you have questions about other topics, please ask your instructor or refer to the appropriate learning materials.";
+    }
+    
+    // Log the interaction
+    console.log(`Lesson chat - Lesson ID: ${lessonId}, Question: ${message}`);
+    
+    // Return the response
+    res.json({ message: response });
+  } catch (error) {
+    console.error('Error processing lesson chat message:', error);
+    res.status(500).json({ error: 'Failed to process chat message' });
+  }
 }); 

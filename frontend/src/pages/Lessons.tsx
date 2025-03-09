@@ -179,7 +179,7 @@ export default function Lessons() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
         <span className="ml-2">Loading lessons...</span>
       </div>
     );
@@ -201,25 +201,36 @@ export default function Lessons() {
         <div className="flex flex-col h-full">
           <h1 className="text-2xl font-bold mb-4">{selectedLesson.modules[0].title}</h1>
           
-          {pdfUrl ? (
-            <div className="flex-grow">
-              <iframe 
-                src={pdfUrl} 
-                className="w-full h-[calc(100vh-200px)]" 
-                title={selectedLesson.modules[0].title}
+          <div className="flex flex-1 gap-4">
+            <div className="flex-1">
+              {pdfUrl ? (
+                <div className="h-[calc(100vh-200px)]">
+                  <iframe 
+                    src={pdfUrl} 
+                    className="w-full h-full" 
+                    title={selectedLesson.modules[0].title}
+                  />
+                </div>
+              ) : pdfError ? (
+                <div className="p-4 bg-red-50 text-red-800 rounded-md">
+                  <h2 className="text-lg font-semibold">Error Loading PDF</h2>
+                  <p>The lesson PDF could not be loaded. Please try again later.</p>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center h-[calc(100vh-200px)]">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <span className="ml-2">Loading PDF...</span>
+                </div>
+              )}
+            </div>
+            
+            <div className="w-[350px]">
+              <LessonChatbot 
+                lessonId={selectedLesson.modules[0].id}
+                lessonTitle={selectedLesson.modules[0].title}
               />
             </div>
-          ) : pdfError ? (
-            <div className="p-4 bg-red-50 text-red-800 rounded-md">
-              <h2 className="text-lg font-semibold">Error Loading PDF</h2>
-              <p>The lesson PDF could not be loaded. Please try again later.</p>
-            </div>
-          ) : (
-            <div className="flex items-center justify-center h-[calc(100vh-200px)]">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <span className="ml-2">Loading PDF...</span>
-            </div>
-          )}
+          </div>
         </div>
       </LessonLayout>
     );
@@ -227,7 +238,7 @@ export default function Lessons() {
 
   // If a lesson is selected but not active, show the lesson details with start button for lead students
   if (selectedLesson) {
-    return (
+  return (
       <div className="container mx-auto p-4">
         <Button 
           onClick={() => setSelectedLesson(null)} 
@@ -281,10 +292,10 @@ export default function Lessons() {
                 <CardTitle>{lesson.title}</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {lesson.modules.map((module, moduleIndex) => (
-                    <div 
-                      key={moduleIndex} 
+            <div className="space-y-4">
+              {lesson.modules.map((module, moduleIndex) => (
+                <div
+                  key={moduleIndex}
                       className="flex items-center justify-between p-3 border rounded-md hover:bg-gray-50 cursor-pointer"
                       onClick={() => handleLessonClick(module)}
                     >
@@ -293,18 +304,18 @@ export default function Lessons() {
                         <span>{module.title}</span>
                       </div>
                       <div className="flex items-center">
-                        {module.completed ? (
-                          <Check className="h-5 w-5 text-green-500" />
-                        ) : (
+                    {module.completed ? (
+                      <Check className="h-5 w-5 text-green-500" />
+                    ) : (
                           <Circle className="h-5 w-5 text-gray-300" />
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                    )}
+                  </div>
                 </div>
-              </CardContent>
-            </Card>
-          ))}
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      ))}
         </div>
       )}
       

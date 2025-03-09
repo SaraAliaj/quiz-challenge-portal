@@ -427,5 +427,16 @@ const api = {
       throw error;
     }
   },
+
+  // Send a chat message for a specific lesson
+  sendLessonChatMessage: async (lessonId: string, message: string) => {
+    try {
+      const response = await axiosInstance.post(`/lessons/${lessonId}/chat`, { message });
+      return response.data;
+    } catch (error) {
+      console.error('Error sending lesson chat message:', error);
+      throw error;
+    }
+  },
 };
 export { api };
