@@ -13,6 +13,7 @@ import { createServer } from 'http';
 import rateLimit from 'express-rate-limit';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import adminRoutes from './routes/admin.js';
 
 // Define __dirname for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -156,6 +157,36 @@ const initializeDatabase = async () => {
       )
     `);
     console.log('Lessons table initialized');
+
+    // Create user_courses table if it doesn't exist
+    await promisePool.query(`
+      CREATE TABLE IF NOT EXISTS user_courses (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        course_id INT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE,
+        UNIQUE KEY unique_user_course (user_id, course_id)
+      )
+    `);
+    console.log('User courses table initialized');
+
+    // Create lesson_progress table if it doesn't exist
+    await promisePool.query(`
+      CREATE TABLE IF NOT EXISTS lesson_progress (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        lesson_id INT NOT NULL,
+        completed BOOLEAN DEFAULT FALSE,
+        completed_at TIMESTAMP NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (lesson_id) REFERENCES lessons(id) ON DELETE CASCADE,
+        UNIQUE KEY unique_user_lesson (user_id, lesson_id)
+      )
+    `);
+    console.log('Lesson progress table initialized');
 
     return true;
   } catch (error) {
@@ -345,6 +376,9 @@ const apiLimiter = rateLimit({
 
 // Apply rate limiting to API routes
 app.use('/api/', apiLimiter);
+
+// Mount admin routes
+app.use('/api/admin', adminRoutes);
 
 // User login endpoint
 app.post('/api/auth/login', loginLimiter, async (req, res) => {
@@ -1181,11 +1215,6 @@ httpServer.listen(PORT, () => {
   console.log(`API available at http://localhost:${PORT}/api`);
   console.log(`WebSocket server available at ws://localhost:${PORT}/ws`);
   
-  // Log the available routes for debugging
-  console.log('\nAvailable API Routes:');
-  console.log('- GET /api/lessons/deep-learning/pdf');
-  console.log('- POST /api/lessons/deep-learning/chat');
-  
   // Initialize the database
   connectToDatabase()
     .then(() => {
@@ -1213,499 +1242,104 @@ process.on('uncaughtException', (error) => {
   process.exit(1);
 });
 
-// Admin routes
-app.get('/api/admin/users', verifyToken, isAdmin, async (req, res) => {
-  try {
-    const [users] = await promisePool.query(
-      'SELECT id, username, email, role FROM users'
-    );
-    res.json(users);
-  } catch (error) {
-    console.error('Error fetching users:', error);
-    res.status(500).json({ message: 'Failed to fetch users' });
-  }
-});
-
-// Get all users
-app.get('/api/admin/students', verifyToken, isAdmin, async (req, res) => {
-  try {
-    console.log('Fetching all users...');
-    
-    // First check if users table exists and has data
-    const [tableCheck] = await promisePool.query('SHOW TABLES LIKE "users"');
-    if (tableCheck.length === 0) {
-      console.error('Users table does not exist!');
-      return res.status(500).json({ message: 'Users table does not exist' });
-    }
-
-    // Check total number of users
-    const [countResult] = await promisePool.query('SELECT COUNT(*) as count FROM users');
-    console.log(`Total users in database: ${countResult[0].count}`);
-
-    // Log the table structure
-    const [tableStructure] = await promisePool.query('DESCRIBE users');
-    console.log('Users table structure:', tableStructure);
-
-    // Get all users with detailed logging
-    const [users] = await promisePool.query(`
-      SELECT 
-        id,
-        username,
-        surname,
-        email,
-        role
-      FROM users 
-      ORDER BY username
-    `);
-
-    console.log('Raw users data:', users);
-    console.log(`Found ${users.length} users`);
-    
-    // Log each user's data
-    users.forEach(user => {
-      console.log('User:', {
-        id: user.id,
-        username: user.username,
-        surname: user.surname,
-        email: user.email,
-        role: user.role
-      });
-    });
-
-    res.json(users);
-  } catch (error) {
-    console.error('Error fetching users:', error);
-    res.status(500).json({ 
-      status: 'error',
-      message: 'Failed to fetch users',
-      error: error.message
-    });
-  }
-});
-
-// Update user role to lead_student
-app.put('/api/admin/students/:id/role', verifyToken, isAdmin, async (req, res) => {
-  try {
-    const userId = req.params.id;
-    
-    // First check if the user exists and get their current role
-    const [userCheck] = await promisePool.query(
-      'SELECT role FROM users WHERE id = ?',
-      [userId]
-    );
-
-    if (userCheck.length === 0) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-
-    const currentRole = userCheck[0].role;
-    console.log(`Current role for user ${userId}: ${currentRole}`);
-
-    // Update the role to lead_student
-    const [result] = await promisePool.query(
-      'UPDATE users SET role = "lead_student" WHERE id = ?',
-      [userId]
-    );
-
-    if (result.affectedRows === 0) {
-      return res.status(500).json({ message: 'Failed to update user role' });
-    }
-
-    console.log(`Successfully updated role for user ${userId} from ${currentRole} to lead_student`);
-    res.json({ message: 'User role updated successfully' });
-  } catch (error) {
-    console.error('Error updating user role:', error);
-    res.status(500).json({ 
-      message: 'Failed to update user role',
-      error: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
-    });
-  }
-});
-
-// Test endpoint to create a test user
-app.post('/api/test/create-user', async (req, res) => {
-  try {
-    // Check if users table exists
-    const [tableCheck] = await promisePool.query('SHOW TABLES LIKE "users"');
-    if (tableCheck.length === 0) {
-      console.error('Users table does not exist!');
-      return res.status(500).json({ message: 'Users table does not exist' });
-    }
-
-    // Create test user
-    const [result] = await promisePool.query(
-      'INSERT INTO users (username, surname, email, password, role) VALUES (?, ?, ?, ?, ?)',
-      ['Test', 'User', 'test@example.com', await bcrypt.hash('password123', 10), 'user']
-    );
-
-    console.log('Test user created successfully:', result.insertId);
-    res.json({ message: 'Test user created successfully', userId: result.insertId });
-  } catch (error) {
-    console.error('Error creating test user:', error);
-    res.status(500).json({ 
-      message: 'Failed to create test user',
-      error: error.message
-    });
-  }
-});
-
-// Add a logout endpoint to update active status
-app.post('/api/auth/logout', async (req, res) => {
-  try {
-    const { userId } = req.body;
-    
-    if (!userId) {
-      return res.status(400).json({ message: 'User ID is required' });
-    }
-    
-    console.log('Logging out user:', userId);
-    
-    // Update user's active status to false
-    await promisePool.query(
-      'UPDATE users SET active = FALSE WHERE id = ?',
-      [userId]
-    );
-
-    // Get user info for the socket event
-    const [userRows] = await promisePool.query(
-      'SELECT username, surname FROM users WHERE id = ?',
-      [userId]
-    );
-
-    if (userRows.length > 0) {
-      // Emit socket event for online status update
-      console.log('Emitting user_status_change event for user:', userId, 'to inactive');
-      wss.clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify({
-            type: 'user_status_change',
-            userId,
-            username: userRows[0].username,
-            surname: userRows[0].surname,
-            active: false
-          }));
-        }
-      });
-    }
-
-    res.json({ message: 'Logged out successfully' });
-  } catch (error) {
-    console.error('Logout error:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-// Modify the online users endpoint
-app.get('/api/users/online', async (req, res) => {
-  try {
-    console.log('Fetching online users');
-    
-    // Get all users where active = true
-    const [rows] = await promisePool.query(
-      `SELECT id, username, surname, role, active 
-       FROM users 
-       WHERE active = TRUE
-       ORDER BY 
-         CASE WHEN role = 'lead_student' THEN 0 ELSE 1 END,
-         username`
-    );
-    
-    console.log('Online users found:', rows.length);
-    console.log('Online users:', rows);
-    res.json(rows);
-  } catch (error) {
-    console.error('Error fetching online users:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-// Chat route handler
-app.post('/api/chat', async (req, res) => {
-  try {
-    const { message } = req.body;
-    
-    if (!message) {
-      return res.status(400).json({ error: 'Message is required' });
-    }
-
-    // For now, we'll use a simple response. Later, you can integrate with an AI service
-    const response = {
-      response: `I received your message: "${message}". I'm a simple echo bot for now, but I'll be smarter soon!`
-    };
-    res.json(response);
-  } catch (error) {
-    console.error('Error handling chat:', error);
-    res.status(500).json({ error: 'Failed to handle chat' });
-  }
-});
-
-// User active status endpoint
-app.post('/api/users/active-status', verifyToken, async (req, res) => {
-  try {
-    const { active } = req.body;
-    const userId = req.user.id;
-    
-    // Update user's active status in the database
-    await promisePool.query(
-      'UPDATE users SET active = ?, active = NOW() WHERE id = ?',
-      [active, userId]
-    );
-    
-    // If the user is becoming active, emit an event to all clients
-    if (active) {
-      // Get user info for the socket event
-      const [userRows] = await promisePool.query(
-        'SELECT id, username, role FROM users WHERE id = ?',
-        [userId]
-      );
-      
-      if (userRows.length > 0) {
-        const user = userRows[0];
-        
-        // Emit event to all clients about the new active user
-        wss.clients.forEach(client => {
-          if (client.readyState === WebSocket.OPEN) {
-            client.send(JSON.stringify({
-              type: 'user_active',
-              id: user.id,
-              username: user.username,
-              role: user.role,
-              Active: new Date()
-            }));
-          }
-        });
-      }
-    } else {
-      // If the user is becoming inactive, emit an event to all clients
-      wss.clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify({
-            type: 'user_inactive',
-            userId
-          }));
-        }
-      });
-    }
-    
-    res.status(200).json({ success: true });
-  } catch (error) {
-    console.error('Error updating active status:', error);
-    res.status(500).json({ error: 'Failed to update active status' });
-  }
-});
-
-// Get all active users endpoint
-app.get('/api/users/active', verifyToken, async (req, res) => {
-  try {
-    const [activeUsers] = await promisePool.query(
-      'SELECT id, username, role, active FROM users WHERE active = true'
-    );
-    
-    res.status(200).json(activeUsers);
-    } catch (error) {
-    console.error('Error fetching active users:', error);
-    res.status(500).json({ error: 'Failed to fetch active users' });
-  }
-});
-
-// Function to ensure all required tables exist
+// Function to ensure required tables exist
 const ensureTablesExist = async () => {
   try {
-    console.log('Ensuring all required tables exist...');
-    
-    // Check which tables exist
-    const [tablesCheck] = await promisePool.query('SHOW TABLES');
-    const tables = tablesCheck.map(row => Object.values(row)[0]);
-    
-    // Define required tables
-    const requiredTables = ['users', 'courses', 'weeks', 'days', 'lessons'];
-    
-    // Check each required table
-    for (const table of requiredTables) {
-      if (!tables.includes(table)) {
-        console.log(`Table '${table}' does not exist. Creating it...`);
-        
-        // Create the missing table based on its type
-        switch (table) {
-          case 'users':
-            await promisePool.query(`
-              CREATE TABLE IF NOT EXISTS users (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                username VARCHAR(255) NOT NULL,
-                surname VARCHAR(255),
-                email VARCHAR(255) NOT NULL UNIQUE,
-                password VARCHAR(255) NOT NULL,
-                role ENUM('user', 'lead_student', 'admin') DEFAULT 'user',
-                active BOOLEAN DEFAULT FALSE,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-              )
-            `);
-            console.log('Users table created');
-            break;
-            
-          case 'courses':
-            await promisePool.query(`
-              CREATE TABLE IF NOT EXISTS courses (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                name VARCHAR(255) NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-              )
-            `);
-            console.log('Courses table created');
-            break;
-            
-          case 'weeks':
-            await promisePool.query(`
-              CREATE TABLE IF NOT EXISTS weeks (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                name VARCHAR(255) NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-              )
-            `);
-            console.log('Weeks table created');
-            break;
-            
-          case 'days':
-            await promisePool.query(`
-              CREATE TABLE IF NOT EXISTS days (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                day_name VARCHAR(255) NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-              )
-            `);
-            console.log('Days table created');
-            break;
-            
-          case 'lessons':
-            await promisePool.query(`
-              CREATE TABLE IF NOT EXISTS lessons (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                lesson_name VARCHAR(255) NOT NULL,
-                course_id INT,
-                week_id INT,
-                day_id INT,
-                file_path VARCHAR(255),
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (course_id) REFERENCES courses(id),
-                FOREIGN KEY (week_id) REFERENCES weeks(id),
-                FOREIGN KEY (day_id) REFERENCES days(id)
-              )
-            `);
-            console.log('Lessons table created');
-            break;
-            
-          default:
-            console.log(`No creation script for table '${table}'`);
-        }
-      } else {
-        console.log(`Table '${table}' exists`);
-      }
-    }
-    
+    // Create users table if it doesn't exist
+    await promisePool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        username VARCHAR(255) NOT NULL,
+        surname VARCHAR(255),
+        email VARCHAR(255) NOT NULL UNIQUE,
+        password VARCHAR(255) NOT NULL,
+        role ENUM('user', 'lead_student', 'admin') DEFAULT 'user',
+        active BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.log('Users table verified');
+
+    // Create courses table if it doesn't exist
+    await promisePool.query(`
+      CREATE TABLE IF NOT EXISTS courses (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.log('Courses table verified');
+
+    // Create weeks table if it doesn't exist
+    await promisePool.query(`
+      CREATE TABLE IF NOT EXISTS weeks (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.log('Weeks table verified');
+
+    // Create days table if it doesn't exist
+    await promisePool.query(`
+      CREATE TABLE IF NOT EXISTS days (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        day_name VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    console.log('Days table verified');
+
+    // Create lessons table if it doesn't exist
+    await promisePool.query(`
+      CREATE TABLE IF NOT EXISTS lessons (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        lesson_name VARCHAR(255) NOT NULL,
+        course_id INT,
+        week_id INT,
+        day_id INT,
+        file_path VARCHAR(255),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE,
+        FOREIGN KEY (week_id) REFERENCES weeks(id) ON DELETE CASCADE,
+        FOREIGN KEY (day_id) REFERENCES days(id) ON DELETE CASCADE
+      )
+    `);
+    console.log('Lessons table verified');
+
+    // Create user_courses table if it doesn't exist
+    await promisePool.query(`
+      CREATE TABLE IF NOT EXISTS user_courses (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        course_id INT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE,
+        UNIQUE KEY unique_user_course (user_id, course_id)
+      )
+    `);
+    console.log('User courses table verified');
+
+    // Create lesson_progress table if it doesn't exist
+    await promisePool.query(`
+      CREATE TABLE IF NOT EXISTS lesson_progress (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        lesson_id INT NOT NULL,
+        completed BOOLEAN DEFAULT FALSE,
+        completed_at TIMESTAMP NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (lesson_id) REFERENCES lessons(id) ON DELETE CASCADE,
+        UNIQUE KEY unique_user_lesson (user_id, lesson_id)
+      )
+    `);
+    console.log('Lesson progress table verified');
+
     return true;
   } catch (error) {
     console.error('Error ensuring tables exist:', error);
     throw error;
   }
-};
-
-// Add a specific endpoint for the Deep Learning lesson PDF
-app.get('/api/lessons/deep-learning/pdf', (req, res) => {
-  try {
-    console.log('Received request for Deep Learning PDF');
-    // In a real application, this would serve an actual PDF file
-    // For now, we'll just send a JSON response with lesson content
-    const deepLearningContent = {
-      title: "Introduction to Deep Learning",
-      content: `# Introduction to Deep Learning
-
-## What is Deep Learning?
-
-Deep learning is a subset of machine learning that uses neural networks with multiple layers (deep neural networks) to analyze various factors of data.
-
-Key characteristics of deep learning:
-- Uses neural networks with many layers (hence "deep")
-- Can automatically discover features from raw data
-- Excels at processing unstructured data like images, text, and audio
-- Requires large amounts of data and computational power
-- Has achieved state-of-the-art results in many domains
-
-## Applications of Deep Learning
-
-Deep learning has revolutionized many fields:
-
-- Computer Vision: Image classification, object detection, facial recognition
-- Natural Language Processing: Translation, sentiment analysis, chatbots
-- Speech Recognition: Voice assistants, transcription services
-- Healthcare: Disease diagnosis, drug discovery
-- Autonomous Vehicles: Self-driving cars, drones
-- Gaming: AlphaGo, game-playing agents`
-    };
-    
-    console.log('Sending Deep Learning PDF content');
-    sendSuccessResponse(res, deepLearningContent);
-  } catch (error) {
-    console.error('Error serving Deep Learning PDF:', error);
-    sendErrorResponse(res, 500, 'Failed to serve Deep Learning PDF', error);
-  }
-});
-
-// Add a chatbot endpoint for Deep Learning lesson
-app.post('/api/lessons/deep-learning/chat', (req, res) => {
-  try {
-    console.log('Received chat message:', req.body);
-    const { message } = req.body;
-    
-    if (!message) {
-      console.log('No message provided');
-      return sendErrorResponse(res, 400, 'Message is required');
-    }
-    
-    // Enhanced response logic for Deep Learning lesson
-    let response = "I apologize, but I'm having trouble processing your question at the moment. Please try asking a more specific question about the lesson content, or try again later.";
-    
-    const userQuestion = message.toLowerCase();
-    
-    // Define topics related to deep learning
-    const deepLearningTopics = [
-      "neural networks", "deep learning", "machine learning", "ai", "artificial intelligence",
-      "backpropagation", "gradient descent", "activation function", "loss function",
-      "computer vision", "natural language processing", "nlp", "cnn", "rnn", "lstm",
-      "gan", "transformer", "attention mechanism", "overfitting", "underfitting",
-      "bias", "variance", "regularization", "dropout", "batch normalization",
-      "transfer learning", "fine-tuning"
-    ];
-    
-    // Check if the question is related to deep learning topics
-    const isRelevantQuestion = deepLearningTopics.some(topic => userQuestion.includes(topic));
-    
-    if (!isRelevantQuestion && userQuestion.split(' ').length > 2) {
-      response = "I'm sorry, I can only respond to questions about the deep learning lesson content. Please ask a question related to the material we're covering.";
-    } else if (userQuestion.includes("what is") && userQuestion.includes("deep learning")) {
-      response = "Deep learning is a subset of machine learning that uses neural networks with multiple layers (deep neural networks) to analyze various factors of data. It can automatically discover features from raw data and excels at processing unstructured data like images, text, and audio. Deep neural networks are inspired by the structure of the human brain and can learn hierarchical representations of data, with each layer extracting increasingly complex features.";
-    } else if (userQuestion.includes("how") && userQuestion.includes("neural network") && (userQuestion.includes("work") || userQuestion.includes("function"))) {
-      response = "Neural networks work by simulating interconnected neurons that process information. They consist of: 1) Input layer - receives initial data, 2) Hidden layers - where computation occurs through weighted connections, 3) Output layer - produces the final result. During training, the network adjusts connection weights through backpropagation to minimize prediction errors. Each neuron applies an activation function to determine its output signal. The depth of deep neural networks allows them to learn complex patterns and representations from data.";
-    } else if (userQuestion.includes("application") || userQuestion.includes("use case")) {
-      response = "Deep learning has many applications including: 1) Computer Vision - image classification, object detection, facial recognition, and medical image analysis, 2) Natural Language Processing - translation, sentiment analysis, text generation, and chatbots, 3) Speech Recognition - voice assistants and transcription services, 4) Healthcare - disease diagnosis, drug discovery, and personalized medicine, 5) Autonomous Vehicles - self-driving cars and drones, 6) Gaming - AI opponents and procedural content generation, 7) Finance - fraud detection and algorithmic trading, 8) Recommendation Systems - personalized content and product recommendations.";
-    } else if (userQuestion.includes("challenge") || userQuestion.includes("limitation")) {
-      response = "Despite its success, deep learning faces several challenges: 1) Data Requirements - it requires large amounts of labeled data for training, 2) Computational Intensity - training complex models demands significant computing resources and energy, 3) Interpretability - models often function as 'black boxes' making decisions difficult to explain, 4) Adversarial Vulnerability - models can be fooled by specially crafted inputs, 5) Bias Amplification - models may perpetuate or amplify biases present in training data, 6) Generalization - models may struggle with scenarios not represented in training data, 7) Hyperparameter Tuning - finding optimal model configurations can be time-consuming.";
-    } else if (userQuestion.includes("history") || userQuestion.includes("development") || userQuestion.includes("evolution")) {
-      response = "The history of deep learning spans several decades: 1) 1940s-50s - Early neural network concepts emerged with McCulloch-Pitts neurons and the Perceptron, 2) 1980s - Backpropagation algorithm was popularized for training multi-layer networks, 3) 1990s - Key innovations like CNNs and LSTMs were developed but faced computational limitations, 4) 2000s - Support Vector Machines and other methods overshadowed neural networks, 5) 2010s - Deep learning renaissance began with breakthroughs like AlexNet (2012), enabled by GPUs, big data, and algorithmic improvements, 6) 2010s-Present - Rapid advancement with GANs, transformers, self-supervised learning, and foundation models like GPT and DALL-E, making deep learning accessible and applicable across numerous domains.";
-    } else if (userQuestion.includes("get started") || userQuestion.includes("begin") || userQuestion.includes("learn")) {
-      response = "To begin with deep learning: 1) Build Mathematical Foundations - understand linear algebra, calculus, probability, and statistics, 2) Learn Python Programming - the dominant language for deep learning, 3) Study Machine Learning Fundamentals - grasp basic concepts before diving into deep learning, 4) Master a Framework - learn TensorFlow, PyTorch, or Keras, 5) Take Online Courses - platforms like Coursera, edX, and fast.ai offer excellent deep learning courses, 6) Read Key Textbooks - such as 'Deep Learning' by Goodfellow, Bengio, and Courville, 7) Practice with Projects - implement papers and work on Kaggle competitions, 8) Join Communities - participate in forums like Reddit's r/MachineLearning or attend meetups, 9) Stay Updated - follow research papers on arXiv and blogs from leading AI labs.";
-    } else if (userQuestion.includes("difference") && (userQuestion.includes("machine learning") || userQuestion.includes("ml"))) {
-      response = "The key differences between deep learning and traditional machine learning are: 1) Feature Engineering - traditional ML often requires manual feature extraction, while deep learning automatically learns features from raw data, 2) Data Volume - deep learning typically requires more data to perform well, 3) Computational Resources - deep learning models are more computationally intensive to train, 4) Architecture - deep learning uses neural networks with multiple layers, while traditional ML uses algorithms like decision trees, SVMs, or linear regression, 5) Problem Complexity - deep learning excels at complex tasks like image recognition and natural language processing where traditional ML might struggle, 6) Interpretability - traditional ML models are often more interpretable than deep learning models.";
-    } else if (userQuestion.includes("architecture") || userQuestion.includes("type") || userQuestion.includes("model")) {
-      response = "Common deep learning architectures include: 1) Convolutional Neural Networks (CNNs) - specialized for grid-like data such as images, using convolutional layers to detect spatial patterns, 2) Recurrent Neural Networks (RNNs) - designed for sequential data like text or time series, with LSTM and GRU variants addressing the vanishing gradient problem, 3) Transformers - using self-attention mechanisms for parallel processing of sequences, powering models like BERT and GPT, 4) Generative Adversarial Networks (GANs) - consisting of generator and discriminator networks that compete to create realistic synthetic data, 5) Autoencoders - unsupervised learning models that compress then reconstruct data, useful for dimensionality reduction and anomaly detection, 6) Deep Reinforcement Learning - combining deep learning with reinforcement learning for decision-making tasks.";
-    } else if (isRelevantQuestion) {
-      response = "Your question about deep learning is relevant to our lesson. To provide a more specific answer, could you please rephrase your question or specify which aspect of deep learning you'd like to learn more about? I can discuss neural network architectures, training methods, applications, limitations, history, or getting started in the field.";
-    }
-    
-    console.log('Sending chat response:', response);
-    sendSuccessResponse(res, { response });
-  } catch (error) {
-    console.error('Error processing chat message:', error);
-    sendErrorResponse(res, 500, 'Failed to process chat message', error);
-  }
-}); 
+}; 

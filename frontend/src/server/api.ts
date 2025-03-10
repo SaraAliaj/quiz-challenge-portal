@@ -66,7 +66,7 @@ const BASE_URL = 'http://localhost:8000';
 
 // Create an axios instance for Node.js API calls
 export const nodeAxiosInstance = axios.create({
-  baseURL: BASE_URL,
+  baseURL: `${BASE_URL}/api`,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -137,7 +137,7 @@ export const api = {
   // Auth functions (Node.js backend)
   login: async (email: string, password: string) => {
     try {
-      const response = await nodeAxiosInstance.post('/api/auth/login', { email, password });
+      const response = await nodeAxiosInstance.post('/auth/login', { email, password });
       return response.data;
     } catch (error) {
       console.error('Login failed:', error);
@@ -147,7 +147,7 @@ export const api = {
 
   register: async (username: string, email: string, password: string) => {
     try {
-      const response = await nodeAxiosInstance.post('/api/auth/register', { username, email, password });
+      const response = await nodeAxiosInstance.post('/auth/register', { username, email, password });
       return response.data;
     } catch (error) {
       console.error('Registration failed:', error);
@@ -157,7 +157,7 @@ export const api = {
 
   verifyToken: async () => {
     try {
-      const response = await nodeAxiosInstance.get('/api/auth/verify');
+      const response = await nodeAxiosInstance.get('/auth/verify');
       return response.data;
     } catch (error) {
       console.error('Token verification failed:', error);
@@ -515,7 +515,7 @@ export const api = {
 
   logout: async (userId: string) => {
     try {
-      await nodeAxiosInstance.post('/api/auth/logout', { userId });
+      await nodeAxiosInstance.post('/auth/logout', { userId });
       disconnectWebSocket();
       localStorage.removeItem('authToken');
     } catch (error) {

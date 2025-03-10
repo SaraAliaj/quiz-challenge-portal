@@ -140,7 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     password: string;
   }) => {
     try {
-      const response = await api.register(userData);
+      const response = await api.register(userData.username, userData.surname, userData.email);
       console.log('Registration response in AuthContext:', response);
       
       // Extract user and token from the response

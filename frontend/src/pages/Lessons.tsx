@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Check, Circle, Loader2, Download, BookOpen, FileText, Sparkles } from "lucide-react";
+import { Check, Circle, Loader2, Download, BookOpen, FileText, Sparkles, ArrowLeft, XCircle, Clock } from "lucide-react";
 import { api } from "@/server/api";
 import { LessonLayout } from "@/components/LessonLayout";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { useWebSocket } from "@/contexts/WebSocketContext";
 import LessonPopup from "@/components/LessonPopup";
 import LessonChatbot from "@/components/LessonChatbot";
 import { useToast } from "@/components/ui/use-toast";
+import { motion } from "framer-motion";
 
 interface Module {
   title: string;
@@ -136,7 +137,7 @@ export default function Lessons() {
     if (activeLessonId === module.id || user?.role === 'lead_student') {
       try {
         console.log('Fetching lesson PDF...');
-        const response = await api.getLessonPdf(module.id);
+        const response = await api.getLessonContent(module.id);
         
         if (response && response.pdfUrl) {
           setPdfUrl(response.pdfUrl);
@@ -157,11 +158,10 @@ export default function Lessons() {
     
     try {
       console.log('Fetching lesson PDF after start...');
-      const response = await api.getLessonPdf(lessonId);
+      const response = await api.getLessonContent(lessonId);
       
       if (response && response.pdfUrl) {
         setPdfUrl(response.pdfUrl);
-        
         toast({
           title: "Lesson Started",
           description: `Lesson will be active for ${duration} minutes.`,
@@ -197,135 +197,228 @@ export default function Lessons() {
   // If a lesson is selected and active, show the lesson content with PDF and chatbot
   if (selectedLesson && activeLessonId && selectedLesson.modules[0].id === activeLessonId) {
     return (
-      <LessonLayout isLesson1={true}>
-        <div className="flex flex-col h-full">
-          <h1 className="text-2xl font-bold mb-4">{selectedLesson.modules[0].title}</h1>
-          
-          <div className="flex flex-1 gap-4">
-            <div className="flex-1">
-              {pdfUrl ? (
-                <div className="h-[calc(100vh-200px)]">
+      <div className="flex h-screen bg-slate-50">
+        {/* Main content area */}
+        <div className="flex-1 flex flex-col">
+          <div className="p-6">
+            <motion.div
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+              className="flex items-center space-x-4 mb-6"
+            >
+              <Button 
+                onClick={() => setSelectedLesson(null)} 
+                variant="ghost"
+                className="text-slate-600 hover:text-slate-900"
+              >
+                <ArrowLeft className="h-5 w-5 mr-2" />
+                Back to Lessons
+              </Button>
+              <h1 className="text-2xl font-semibold text-slate-900">{selectedLesson.modules[0].title}</h1>
+            </motion.div>
+
+            <div className="grid grid-cols-3 gap-6 h-[calc(100vh-12rem)]">
+              {/* PDF Viewer */}
+              <div className="col-span-2 bg-white rounded-lg shadow-sm border border-slate-200">
+                {pdfUrl ? (
                   <iframe 
                     src={pdfUrl} 
-                    className="w-full h-full" 
+                    className="w-full h-full rounded-lg" 
                     title={selectedLesson.modules[0].title}
                   />
-                </div>
-              ) : pdfError ? (
-                <div className="p-4 bg-red-50 text-red-800 rounded-md">
-                  <h2 className="text-lg font-semibold">Error Loading PDF</h2>
-                  <p>The lesson PDF could not be loaded. Please try again later.</p>
-                </div>
-              ) : (
-                <div className="flex items-center justify-center h-[calc(100vh-200px)]">
-                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                  <span className="ml-2">Loading PDF...</span>
-                </div>
-              )}
-            </div>
-            
-            <div className="w-[350px]">
-              <LessonChatbot 
-                lessonId={selectedLesson.modules[0].id}
-                lessonTitle={selectedLesson.modules[0].title}
-              />
+                ) : pdfError ? (
+                  <div className="flex items-center justify-center h-full">
+                    <div className="text-center p-6">
+                      <XCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+                      <h3 className="text-lg font-medium text-slate-900 mb-2">Failed to Load PDF</h3>
+                      <p className="text-slate-600">The lesson content could not be loaded. Please try again later.</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center h-full">
+                    <Loader2 className="h-8 w-8 animate-spin text-slate-600" />
+                    <span className="ml-2 text-slate-600">Loading PDF...</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Chatbot */}
+              <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+                <LessonChatbot 
+                  lessonId={selectedLesson.modules[0].id}
+                  lessonTitle={selectedLesson.modules[0].title}
+                />
+              </div>
             </div>
           </div>
         </div>
-      </LessonLayout>
+      </div>
     );
   }
 
   // If a lesson is selected but not active, show the lesson details with start button for lead students
   if (selectedLesson) {
-  return (
-      <div className="container mx-auto p-4">
-        <Button 
-          onClick={() => setSelectedLesson(null)} 
-          variant="outline" 
-          className="mb-4"
-        >
-          Back to Lessons
-        </Button>
-        
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle>{selectedLesson.modules[0].title}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="mb-4">This lesson is part of {selectedLesson.title}.</p>
-            
-            {user?.role === 'lead_student' && (
-              <LessonPopup 
-                lessonId={selectedLesson.modules[0].id} 
-                lessonName={selectedLesson.modules[0].title}
-                onLessonStart={handleLessonStart}
-              />
-            )}
-            
-            {user?.role !== 'lead_student' && (
-              <div className="p-4 bg-blue-50 text-blue-800 rounded-md">
-                <h2 className="text-lg font-semibold">Waiting for Lesson</h2>
-                <p>The lead student hasn't started this lesson yet. Please wait for them to begin.</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+    return (
+      <div className="min-h-screen bg-slate-50 p-6">
+        <div className="max-w-3xl mx-auto">
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="flex items-center space-x-4 mb-6"
+          >
+            <Button 
+              onClick={() => setSelectedLesson(null)} 
+              variant="ghost"
+              className="text-slate-600 hover:text-slate-900"
+            >
+              <ArrowLeft className="h-5 w-5 mr-2" />
+              Back to Lessons
+            </Button>
+          </motion.div>
+          
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+          >
+            <Card className="bg-white shadow-sm border-slate-200">
+              <CardHeader className="border-b border-slate-100">
+                <CardTitle className="text-xl text-slate-900">{selectedLesson.modules[0].title}</CardTitle>
+                <p className="text-sm text-slate-600">Part of {selectedLesson.title}</p>
+              </CardHeader>
+              <CardContent className="p-6">
+                {user?.role === 'lead_student' ? (
+                  <div className="space-y-4">
+                    <p className="text-slate-600">As a lead student, you can start this lesson for your class.</p>
+                    <LessonPopup 
+                      lessonId={selectedLesson.modules[0].id} 
+                      lessonName={selectedLesson.modules[0].title}
+                      onLessonStart={handleLessonStart}
+                    />
+                  </div>
+                ) : (
+                  <div className="p-4 bg-blue-50 border border-blue-100 rounded-lg">
+                    <div className="flex items-center space-x-3">
+                      <Clock className="h-5 w-5 text-blue-600" />
+                      <div>
+                        <h3 className="text-sm font-medium text-blue-900">Waiting for Lesson to Start</h3>
+                        <p className="text-sm text-blue-700">The lead student hasn't started this lesson yet. Please wait for them to begin.</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </motion.div>
+        </div>
       </div>
     );
   }
 
   // Default view - show all lessons
   return (
-    <div className="container mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-6">Lessons</h1>
-      
-      {lessons.length === 0 ? (
-        <div className="text-center p-8">
-          <p className="text-gray-500">No lessons available.</p>
-        </div>
-      ) : (
-        <div className="grid gap-6">
-          {lessons.map((lesson, index) => (
-            <Card key={index}>
-              <CardHeader>
-                <CardTitle>{lesson.title}</CardTitle>
-              </CardHeader>
-              <CardContent>
-            <div className="space-y-4">
-              {lesson.modules.map((module, moduleIndex) => (
-                <div
-                  key={moduleIndex}
-                      className="flex items-center justify-between p-3 border rounded-md hover:bg-gray-50 cursor-pointer"
-                      onClick={() => handleLessonClick(module)}
-                    >
-                      <div className="flex items-center">
-                        <BookOpen className="h-5 w-5 text-primary mr-2" />
-                        <span>{module.title}</span>
-                      </div>
-                      <div className="flex items-center">
-                    {module.completed ? (
-                      <Check className="h-5 w-5 text-green-500" />
-                    ) : (
-                          <Circle className="h-5 w-5 text-gray-300" />
-                    )}
-                  </div>
-                </div>
-              ))}
+    <div className="min-h-screen bg-slate-50">
+      <div className="max-w-7xl mx-auto p-6">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="mb-8"
+        >
+          <h1 className="text-3xl font-semibold text-slate-900">Course Lessons</h1>
+          <p className="text-slate-600 mt-2">Select a lesson to begin learning</p>
+        </motion.div>
+        
+        {lessons.length === 0 ? (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+            className="text-center p-12 bg-white rounded-lg border border-slate-200 shadow-sm"
+          >
+            <div className="max-w-sm mx-auto">
+              <BookOpen className="h-12 w-12 text-slate-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-slate-900 mb-2">No Lessons Available</h3>
+              <p className="text-slate-600">Check back later for new content.</p>
             </div>
-          </CardContent>
-        </Card>
-      ))}
-        </div>
-      )}
-      
-      {/* Debug information - only show in development */}
-      {process.env.NODE_ENV === 'development' && debugInfo && (
-        <div className="mt-8 p-4 bg-gray-100 rounded-md">
-          <h3 className="font-semibold mb-2">Debug Information</h3>
-          <pre className="text-xs whitespace-pre-wrap">{debugInfo}</pre>
-        </div>
-      )}
+          </motion.div>
+        ) : (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+            className="grid gap-6"
+          >
+            {lessons.map((lesson, index) => (
+              <motion.div
+                key={index}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.1 * index }}
+              >
+                <Card className="bg-white shadow-sm hover:shadow-md transition-shadow duration-200 border border-slate-200">
+                  <CardHeader className="border-b border-slate-100 bg-slate-50">
+                    <CardTitle className="text-xl text-slate-800">{lesson.title}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-6">
+                    <div className="space-y-3">
+                      {lesson.modules.map((module, moduleIndex) => (
+                        <motion.div
+                          key={moduleIndex}
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ duration: 0.5, delay: 0.1 * moduleIndex }}
+                          className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 cursor-pointer transition-colors duration-200"
+                          onClick={() => handleLessonClick(module)}
+                        >
+                          <div className="flex items-center space-x-4">
+                            <div className="p-2 bg-slate-100 rounded-full">
+                              <BookOpen className="h-5 w-5 text-slate-600" />
+                            </div>
+                            <div>
+                              <h3 className="font-medium text-slate-900">{module.title}</h3>
+                              {activeLessonId === module.id && (
+                                <span className="text-sm text-primary">Currently Active</span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-3">
+                            {module.completed ? (
+                              <div className="flex items-center text-green-600 bg-green-50 px-3 py-1 rounded-full">
+                                <Check className="h-4 w-4 mr-1" />
+                                <span className="text-sm font-medium">Completed</span>
+                              </div>
+                            ) : (
+                              <div className="flex items-center text-slate-400">
+                                <Circle className="h-4 w-4" />
+                              </div>
+                            )}
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))}
+          </motion.div>
+        )}
+        
+        {/* Debug information - only show in development */}
+        {process.env.NODE_ENV === 'development' && debugInfo && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.5, delay: 0.8 }}
+            className="mt-8 p-6 bg-white rounded-lg border border-slate-200 shadow-sm"
+          >
+            <h3 className="text-sm font-semibold text-slate-800 mb-2">Debug Information</h3>
+            <pre className="text-xs text-slate-600 bg-slate-50 p-4 rounded border border-slate-200 overflow-auto">{debugInfo}</pre>
+          </motion.div>
+        )}
+      </div>
     </div>
   );
 }
