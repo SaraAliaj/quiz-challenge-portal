@@ -10,6 +10,7 @@
     border-right: 1px solid #e0e0e0;
     position: relative;
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);
+    font-weight: 500;
 }
 
 .sidebar.collapsed {
@@ -32,11 +33,11 @@
 /* Toggle button */
 .toggle-sidebar-btn {
     position: absolute;
-    top: 10px;
-    right: 10px;
-    background-color: transparent;
+    top: 20px;
+    right: -12px;
+    background-color: white;
     color: #666;
-    border: none;
+    border: 1px solid #e0e0e0;
     width: 24px;
     height: 24px;
     display: flex;
@@ -44,12 +45,16 @@
     justify-content: center;
     cursor: pointer;
     z-index: 10;
-    border-radius: 4px;
-    font-size: 14px;
+    border-radius: 50%;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
 }
 
 .toggle-sidebar-btn:hover {
     background-color: #f0f0f0;
+}
+
+.sidebar.collapsed .toggle-sidebar-btn svg {
+    transform: rotate(180deg);
 }
 
 /* School logo and name */
@@ -80,7 +85,7 @@
 
 .school-name h1 {
     font-size: 18px;
-    font-weight: 600;
+    font-weight: 700;
     margin: 0;
     color: #333;
 }
@@ -96,11 +101,7 @@
     padding: 15px;
     margin-bottom: 15px;
     border-bottom: 1px solid #e0e0e0;
-}
-
-.user-info {
-    display: flex;
-    align-items: center;
+    background-color: #f9f9f9;
 }
 
 .user-avatar {
@@ -116,6 +117,8 @@
     margin-right: 12px;
     flex-shrink: 0;
     font-size: 16px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    margin-bottom: 10px;
 }
 
 .user-details {
@@ -123,7 +126,7 @@
 }
 
 .user-name {
-    font-weight: 600;
+    font-weight: 700;
     font-size: 14px;
     white-space: nowrap;
     overflow: hidden;
@@ -146,12 +149,12 @@
 
 .role-badge {
     display: inline-block;
-    background-color: #f0f0f0;
+    background-color: #ffd700;
     color: #333;
     font-size: 10px;
     padding: 2px 8px;
     border-radius: 10px;
-    font-weight: 500;
+    font-weight: 600;
     text-transform: uppercase;
 }
 
@@ -159,11 +162,9 @@
     display: none;
 }
 
-/* Online Students Section */
-.online-students-section {
-    margin-bottom: 15px;
-    border-bottom: 1px solid #e0e0e0;
-    padding-bottom: 15px;
+/* Sidebar sections */
+.sidebar-section {
+    margin-bottom: 5px;
 }
 
 .section-header {
@@ -174,6 +175,7 @@
     transition: all 0.2s;
     color: #333;
     text-decoration: none;
+    font-weight: 600;
 }
 
 .section-header:hover {
@@ -182,29 +184,39 @@
 
 .section-header.active {
     background-color: #f0f0f0;
-    font-weight: 500;
+    font-weight: 700;
 }
 
 .section-icon {
     margin-right: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
     color: #555;
 }
 
 .count-badge {
     margin-left: auto;
-    background-color: #e6f7ff;
-    color: #1890ff;
+    background-color: #52c41a;
+    color: white;
     font-size: 12px;
     padding: 2px 8px;
     border-radius: 10px;
-    font-weight: 500;
+    font-weight: 600;
 }
 
+.dropdown-icon {
+    margin-left: auto;
+    transition: transform 0.3s;
+}
+
+.dropdown-icon.open {
+    transform: rotate(180deg);
+}
+
+/* Online students list */
 .online-students-list {
     padding: 0 15px 5px;
+    background-color: #e6f7ff;
+    margin: 0 15px;
+    border-radius: 4px;
 }
 
 .online-student-item {
@@ -213,11 +225,10 @@
     padding: 8px 10px;
     border-radius: 4px;
     margin-bottom: 5px;
-    background-color: #f9f9f9;
 }
 
 .online-student-item.lead-student {
-    background-color: #fffbe6;
+    background-color: rgba(255, 215, 0, 0.1);
 }
 
 .student-dot {
@@ -236,181 +247,62 @@
 .student-name {
     font-size: 12px;
     color: #333;
+    font-weight: 600;
 }
 
-/* AI Chat Section */
-.ai-chat-section {
-    margin-bottom: 15px;
-    border-bottom: 1px solid #e0e0e0;
-    padding-bottom: 15px;
+/* Submenu styling */
+.submenu {
+    padding-left: 15px;
 }
 
-/* Curriculum Section */
-.curriculum-section {
-    margin-bottom: 15px;
+.submenu-item {
+    margin-bottom: 5px;
 }
 
-.section-header.open .dropdown-icon {
-    transform: rotate(180deg);
-}
-
-.curriculum-content {
-    max-height: 0;
-    overflow: hidden;
-    transition: max-height 0.3s ease;
-}
-
-.curriculum-content.open {
-    max-height: 1000px;
-}
-
-.course-item {
-    margin-left: 15px;
-}
-
-.course-header {
-    display: flex;
-    align-items: center;
-    padding: 8px 15px;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.course-header:hover {
-    background-color: #f5f5f5;
-}
-
-.course-header.open {
-    background-color: #f0f0f0;
-}
-
-.course-name {
-    flex: 1;
-    font-size: 14px;
-    font-weight: 500;
-}
-
-.course-content {
-    max-height: 0;
-    overflow: hidden;
-    transition: max-height 0.3s ease;
-}
-
-.course-content.open {
-    max-height: 1000px;
-}
-
-.week-item {
-    margin-left: 15px;
-    border-left: 1px solid #e0e0e0;
-}
-
-.week-header {
+.submenu-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 8px 15px;
     cursor: pointer;
     transition: all 0.2s;
+    font-weight: 600;
 }
 
-.week-header:hover {
+.submenu-header:hover {
     background-color: #f5f5f5;
 }
 
-.week-header.open {
-    background-color: #f0f0f0;
-}
-
-.week-name {
-    font-size: 13px;
-    font-weight: 500;
-}
-
-.lesson-list {
-    max-height: 0;
-    overflow: hidden;
-    transition: max-height 0.3s ease;
-    list-style: none;
-    padding: 0;
-    margin: 0;
-}
-
-.lesson-list.open {
-    max-height: 500px;
+.submenu-content {
+    padding-left: 15px;
 }
 
 .lesson-item {
-    margin-left: 10px;
+    display: flex;
+    flex-direction: column;
+    padding: 8px 15px;
+    cursor: pointer;
+    transition: all 0.2s;
+    border-left: 1px solid #e0e0e0;
+    font-size: 13px;
 }
 
-.lesson-item.active .lesson-link {
+.lesson-item:hover {
+    background-color: #f5f5f5;
+}
+
+.lesson-item.active {
     background-color: #e6f7ff;
     border-left: 2px solid #1890ff;
 }
 
-.lesson-link {
-    display: flex;
-    flex-direction: column;
-    padding: 8px 15px;
-    text-decoration: none;
-    color: #333;
-    font-size: 13px;
-    transition: all 0.2s;
-    border-left: 1px solid #e0e0e0;
-}
-
-.lesson-link:hover {
-    background-color: #f5f5f5;
-}
-
-.lesson-name {
-    font-weight: 400;
-    margin-bottom: 2px;
-}
-
-.lesson-status {
+.active-indicator {
     font-size: 11px;
     color: #1890ff;
     font-style: italic;
 }
 
-/* Special handling for collapsed state */
-.sidebar.collapsed .section-header span,
-.sidebar.collapsed .course-header span,
-.sidebar.collapsed .week-header span,
-.sidebar.collapsed .lesson-link span {
-    display: none;
-}
-
-.sidebar.collapsed .dropdown-icon {
-    display: none;
-}
-
-.sidebar.collapsed .curriculum-content,
-.sidebar.collapsed .course-content,
-.sidebar.collapsed .lesson-list {
-    position: absolute;
-    left: 60px;
-    top: 0;
-    width: 200px;
-    background-color: #ffffff;
-    border: 1px solid #e0e0e0;
-    border-radius: 0 4px 4px 0;
-    z-index: 10;
-    max-height: 0;
-    display: none;
-    box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.1);
-}
-
-.sidebar.collapsed .section-header:hover .curriculum-content,
-.sidebar.collapsed .course-header:hover .course-content,
-.sidebar.collapsed .week-header:hover .lesson-list {
-    max-height: 500px;
-    display: block;
-}
-
-/* Footer with sign out button */
+/* Sign Out Button */
 .sidebar-footer {
     padding: 15px;
     border-top: 1px solid #e0e0e0;
@@ -422,22 +314,61 @@
     align-items: center;
     width: 100%;
     padding: 10px;
-    background-color: transparent;
-    border: 1px solid #e0e0e0;
+    background-color: rgba(255, 0, 0, 0.1);
+    border: 1px solid #ff0000;
     border-radius: 4px;
     cursor: pointer;
     transition: all 0.2s;
-    color: #333;
+    color: #ff0000;
+    font-weight: 600;
 }
 
 .sign-out-btn:hover {
-    background-color: #f0f0f0;
+    background-color: #ff0000;
+    color: white;
 }
 
-.sign-out-btn svg {
+.sign-out-icon {
     margin-right: 10px;
 }
 
 .sidebar.collapsed .sign-out-btn span {
     display: none;
+}
+
+/* Special handling for collapsed state */
+.sidebar.collapsed .section-header span,
+.sidebar.collapsed .submenu-header span,
+.sidebar.collapsed .lesson-item span {
+    display: none;
+}
+
+.sidebar.collapsed .dropdown-icon {
+    display: none;
+}
+
+.sidebar.collapsed .submenu {
+    display: none;
+}
+
+/* Admin Panel Styles */
+.admin-menu-item {
+    display: flex;
+    align-items: center;
+    padding: 8px 15px;
+    margin: 5px 0;
+    text-decoration: none;
+    color: #333;
+    font-size: 13px;
+    transition: all 0.2s;
+    border-radius: 4px;
+}
+
+.admin-menu-item:hover {
+    background-color: #f0f0f0;
+}
+
+.admin-menu-icon {
+    margin-right: 10px;
+    color: #555;
 }

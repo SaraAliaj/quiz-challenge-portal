@@ -179,7 +179,7 @@ export default function LessonChatbot({
       // Create AI message from response
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
-        content: response.message || response.response || "I'm sorry, I couldn't generate a response. Please try again.",
+        content: response.message || "I'm sorry, I couldn't generate a response. Please try again.",
         sender: 'ai',
         timestamp: new Date()
       };
@@ -229,12 +229,6 @@ export default function LessonChatbot({
         <div className="lesson-title">
           <BookOpen size={20} />
           <h2>Deep Learning - Week 1</h2>
-        </div>
-        <div className="lesson-actions">
-          <a href={mockPdfUrl} download className="download-btn">
-            <Download size={16} />
-            <span>Download PDF</span>
-          </a>
         </div>
       </div>
 

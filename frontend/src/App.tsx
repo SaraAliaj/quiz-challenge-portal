@@ -18,6 +18,7 @@ import Dashboard from '@/pages/Dashboard';
 import GroupChat from "@/pages/GroupChat";
 import Admin from "@/pages/Admin";
 import LessonPage from "@/pages/LessonPage";
+import { ManageCourses, ManageLessons, ManageStudents } from "@/pages/admin/index";
 
 const queryClient = new QueryClient();
 
@@ -58,14 +59,28 @@ const App = () => (
               <Route path="challenges" element={<Challenges />} />
               <Route path="quizzes" element={<Quizzes />} />
               <Route path="quiz/:id" element={<QuizContent />} />
-              <Route 
-                path="admin" 
-                element={
-                  <AdminRoute>
-                    <Admin />
-                  </AdminRoute>
-                } 
-              />
+              
+              {/* Admin routes */}
+              <Route path="admin" element={
+                <AdminRoute>
+                  <Admin />
+                </AdminRoute>
+              } />
+              <Route path="admin/courses" element={
+                <AdminRoute>
+                  <ManageCourses />
+                </AdminRoute>
+              } />
+              <Route path="admin/lessons" element={
+                <AdminRoute>
+                  <ManageLessons />
+                </AdminRoute>
+              } />
+              <Route path="admin/students" element={
+                <AdminRoute>
+                  <ManageStudents />
+                </AdminRoute>
+              } />
             </Route>
 
             {/* 404 route */}

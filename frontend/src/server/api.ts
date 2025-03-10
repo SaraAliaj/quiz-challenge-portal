@@ -289,6 +289,119 @@ const api = {
       throw new Error(errorMessage);
     }
   },
+
+  // Admin API functions
+  getCourses: async () => {
+    try {
+      const response = await nodeAxiosInstance.get('/courses');
+      return response.data;
+    } catch (error) {
+      console.error('Failed to fetch courses:', error);
+      throw error;
+    }
+  },
+
+  addCourse: async (courseData: { name: string }) => {
+    try {
+      const response = await nodeAxiosInstance.post('/courses', courseData);
+      return response.data;
+    } catch (error) {
+      console.error('Failed to add course:', error);
+      throw error;
+    }
+  },
+
+  getLessons: async () => {
+    try {
+      const response = await nodeAxiosInstance.get('/lessons');
+      return response.data;
+    } catch (error) {
+      console.error('Failed to fetch lessons:', error);
+      throw error;
+    }
+  },
+
+  addLesson: async (lessonData: { 
+    lesson_name: string; 
+    course_id: number; 
+    week_id: number; 
+    day_id: number; 
+    file_path: string;
+  }) => {
+    try {
+      const response = await nodeAxiosInstance.post('/lessons', lessonData);
+      return response.data;
+    } catch (error) {
+      console.error('Failed to add lesson:', error);
+      throw error;
+    }
+  },
+
+  getUsers: async () => {
+    try {
+      const response = await nodeAxiosInstance.get('/admin/users');
+      return response.data;
+    } catch (error) {
+      console.error('Failed to fetch users:', error);
+      throw error;
+    }
+  },
+
+  updateUserRole: async (userId: number, role: string) => {
+    try {
+      const response = await nodeAxiosInstance.put(`/admin/students/${userId}/role`, { role });
+      return response.data;
+    } catch (error) {
+      console.error('Failed to update user role:', error);
+      throw error;
+    }
+  },
+
+  deleteUser: async (userId: number) => {
+    try {
+      const response = await nodeAxiosInstance.delete(`/admin/students/${userId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Failed to delete user:', error);
+      throw error;
+    }
+  },
+
+  // Functions to fetch weeks and days
+  getWeeks: async () => {
+    try {
+      const response = await nodeAxiosInstance.get('/weeks');
+      return response.data;
+    } catch (error) {
+      console.error('Failed to fetch weeks:', error);
+      throw error;
+    }
+  },
+
+  getDays: async () => {
+    try {
+      const response = await nodeAxiosInstance.get('/days');
+      return response.data;
+    } catch (error) {
+      console.error('Failed to fetch days:', error);
+      throw error;
+    }
+  },
+
+  // Function to upload lesson file
+  uploadLessonFile: async (formData: FormData) => {
+    try {
+      const response = await nodeAxiosInstance.post('/lessons', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Failed to upload lesson file:', error);
+      throw error;
+    }
+  },
 };
 
 // Helper function to process lessons data

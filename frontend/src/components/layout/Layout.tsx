@@ -53,7 +53,7 @@ import Sidebar from "@/components/Sidebar";
 interface Lesson {
   id: string;
   name: string;
-  time: string;
+  time?: string;
   isActive?: boolean;
   startTime?: Date;
   duration?: number;
@@ -129,6 +129,7 @@ export default function Layout() {
   const [activeLessonSession, setActiveLessonSession] = useState<{
     lessonId: string;
     startTime: Date;
+    duration: number;
   } | null>(null);
   const socketRef = useRef<any>(null); // Using any temporarily for socket type
   const [showNotification, setShowNotification] = useState(false);
@@ -145,6 +146,7 @@ export default function Layout() {
   const [endNotificationData, setEndNotificationData] = useState<{
     lessonName: string;
   } | null>(null);
+  const [showLessonAccessDenied, setShowLessonAccessDenied] = useState(false);
 
   // Fetch courses data when component mounts
   useEffect(() => {
@@ -167,6 +169,79 @@ export default function Layout() {
 
     fetchCourseData();
   }, []);
+
+  // Listen for lesson start notifications
+  useEffect(() => {
+    // This would be a WebSocket connection in a real implementation
+    const handleLessonStarted = (data: any) => {
+      setNotificationData({
+        lessonName: data.lessonName,
+        teacherName: data.teacherName,
+        duration: data.duration
+      });
+      setShowNotification(true);
+      
+      // Set active lesson session
+      setActiveLessonSession({
+        lessonId: data.lessonId,
+        startTime: new Date(),
+        duration: data.duration
+      });
+    };
+
+    // Mock notification for demo purposes
+    const mockNotification = () => {
+      // This is just for demonstration
+      console.log("Setting up mock notification listener");
+    };
+
+    mockNotification();
+
+    return () => {
+      // Cleanup
+    };
+  }, []);
+
+  // Check if a lesson is accessible
+  const isLessonAccessible = (lessonId: string) => {
+    // If user is lead student, they can access any lesson
+    if (user?.role === 'lead_student') return true;
+    
+    // If there's an active lesson session for this lesson, other users can access it
+    return activeLessonSession?.lessonId === lessonId;
+  };
+
+  // Handle lesson navigation
+  const handleLessonNavigation = (lessonId: string, lessonName: string) => {
+    if (isLessonAccessible(lessonId)) {
+      setActiveLesson({ id: lessonId, name: lessonName });
+      navigate(`/lesson/${lessonId}`);
+    } else {
+      setShowLessonAccessDenied(true);
+      setTimeout(() => setShowLessonAccessDenied(false), 3000);
+    }
+  };
+
+  // Start a lesson (for lead students)
+  const startLesson = (lessonId: string, lessonName: string, duration: number) => {
+    if (user?.role !== 'lead_student') return;
+    
+    // Set active lesson
+    setActiveLesson({ id: lessonId, name: lessonName });
+    
+    // Set active lesson session
+    setActiveLessonSession({
+      lessonId,
+      startTime: new Date(),
+      duration
+    });
+    
+    // In a real implementation, this would send a notification to all users
+    console.log(`Starting lesson: ${lessonName} for ${duration} minutes`);
+    
+    // Navigate to lesson
+    navigate(`/lesson/${lessonId}`);
+  };
 
   // Initialize WebSocket connection
   useEffect(() => {
@@ -245,57 +320,6 @@ export default function Layout() {
 
   const toggleSidebar = () => {
     setIsSidebarCollapsed(!isSidebarCollapsed);
-  };
-
-  const startLesson = () => {
-    if (!selectedLessonToStart || !selectedDuration || !user) return;
-
-    if (user.role !== 'lead_student') {
-      toast({
-        title: "Permission Denied",
-        description: "Only lead students can start lessons.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const duration = parseInt(selectedDuration);
-    socketRef.current?.emit('startLesson', {
-      lessonId: selectedLessonToStart.id,
-      duration,
-      teacherName: user.username,
-    });
-
-    // Set active lesson and session
-    setActiveLesson(selectedLessonToStart);
-    setActiveLessonSession({
-      lessonId: selectedLessonToStart.id,
-      startTime: new Date(),
-    });
-
-    setShowDurationDialog(false);
-    setSelectedDuration("");
-
-    // Set a timer to end the lesson
-    const timer = setTimeout(() => {
-      socketRef.current?.emit('endLesson', {
-        lessonId: selectedLessonToStart.id,
-      });
-      setEndNotificationData({
-        lessonName: selectedLessonToStart.name,
-      });
-      setShowEndNotification(true);
-      setActiveLessonSession(null);
-      setActiveLesson(null);
-    }, duration * 60 * 1000);
-
-    setLessonEndTimer(timer);
-    
-    // Navigate to the lesson page
-    navigate(`/lesson/${selectedLessonToStart.id}`);
-    
-    // Clear the selected lesson to start after navigation
-    setSelectedLessonToStart(null);
   };
 
   // Function to format duration
@@ -389,6 +413,47 @@ export default function Layout() {
         <main className="flex-1 overflow-y-auto">
           <Outlet />
         </main>
+        
+        {/* Lesson Access Denied Notification */}
+        {showLessonAccessDenied && (
+          <div className="fixed bottom-4 right-4 bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded shadow-md">
+            <div className="flex">
+              <div className="py-1">
+                <svg className="h-6 w-6 text-red-500 mr-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div>
+                <p className="font-bold">Access Denied</p>
+                <p className="text-sm">Waiting for the lead student to start this lesson.</p>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Lesson Started Notification */}
+        {showNotification && notificationData && (
+          <div className="fixed bottom-4 right-4 bg-green-100 border-l-4 border-green-500 text-green-700 p-4 rounded shadow-md">
+            <div className="flex">
+              <div className="py-1">
+                <svg className="h-6 w-6 text-green-500 mr-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div>
+                <p className="font-bold">Lesson Started</p>
+                <p className="text-sm">{notificationData.lessonName} has been started by {notificationData.teacherName}.</p>
+                <p className="text-sm">Duration: {notificationData.duration} minutes</p>
+                <button 
+                  className="mt-2 bg-green-500 hover:bg-green-600 text-white py-1 px-2 rounded text-xs"
+                  onClick={() => setShowNotification(false)}
+                >
+                  Join Now
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </WebSocketProvider>
   );

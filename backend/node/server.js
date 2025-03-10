@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
-import mysql from 'mysql2';
+import mysql from 'mysql2/promise';
 import cors from 'cors';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
@@ -11,6 +11,12 @@ import pdfIntegration from './pdf_integration.js';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer } from 'http';
 import rateLimit from 'express-rate-limit';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+
+// Define __dirname for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const app = express();
 const httpServer = createServer(app);
@@ -1184,7 +1190,7 @@ process.on('uncaughtException', (error) => {
 app.get('/api/admin/users', verifyToken, isAdmin, async (req, res) => {
   try {
     const [users] = await promisePool.query(
-      'SELECT id, username, email, role, created_at FROM users'
+      'SELECT id, username, email, role FROM users'
     );
     res.json(users);
   } catch (error) {
