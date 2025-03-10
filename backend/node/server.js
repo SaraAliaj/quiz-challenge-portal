@@ -21,14 +21,31 @@ const __dirname = dirname(__filename);
 const app = express();
 const httpServer = createServer(app);
 
-// Initialize WebSocket server with a specific path
-const wss = new WebSocketServer({ 
+// Configure CORS
+app.use(cors({
+  origin: 'http://localhost:5173', // Vite's default dev server port
+  credentials: true
+}));
+
+app.use(express.json());
+
+// Initialize WebSocket server with proper configuration
+const wss = new WebSocketServer({
   server: httpServer,
-  path: '/ws'
+  path: '/ws',
+  clientTracking: true,
+  // Add WebSocket server options
+  verifyClient: (info, callback) => {
+    // Allow all connections initially, authentication happens after connection
+    callback(true);
+  }
 });
 
-// Store connected clients
+// Store connected clients with their user info
 const clients = new Map();
+
+// Use port 8000 directly
+const PORT = 8000;
 
 // At the beginning of the file, check for required environment variables
 if (!process.env.JWT_SECRET) {
@@ -46,22 +63,6 @@ if (!dbUser || !dbPassword) {
   console.error('Error: DB_USER and DB_PASSWORD must be set in environment variables.');
   process.exit(1);
 }
-
-// Configure CORS
-app.use(cors({
-  origin: [
-    'http://localhost:5173',
-    'http://localhost:5174',
-    'http://127.0.0.1:5173',
-    'http://127.0.0.1:5174'
-  ],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
-
-// Parse JSON bodies
-app.use(express.json());
 
 // Create a connection pool with validated parameters
 const pool = mysql.createPool({
@@ -301,27 +302,45 @@ app.get('/api/db-check', async (req, res) => {
 
 // Configure rate limiters for sensitive endpoints
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // Limit each IP to 10 login attempts per window
-  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-  message: 'Too many login attempts from this IP, please try again after 15 minutes'
+  windowMs: 60 * 60 * 1000, // 1 hour window (increased from 15 minutes)
+  max: 100, // Increased from 30 to 100 attempts
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipFailedRequests: true, // Don't count failed requests
+  skipSuccessfulRequests: true, // Don't count successful logins
+  message: {
+    status: 'error',
+    code: 429,
+    message: 'Too many login attempts',
+    details: 'Please wait before trying again or contact support if you need immediate assistance.',
+    remainingTime: 'Try again in a few minutes'
+  }
 });
 
 const registrationLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: 5, // Limit each IP to 5 registration attempts per hour
+  max: 20, // Increased from 5 to 20
   standardHeaders: true,
   legacyHeaders: false,
-  message: 'Too many accounts created from this IP, please try again after an hour'
+  message: {
+    status: 'error',
+    code: 429,
+    message: 'Too many registration attempts',
+    details: 'Please try again later'
+  }
 });
 
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per window
+  max: 500, // Increased from 100 to 500
   standardHeaders: true,
   legacyHeaders: false,
-  message: 'Too many requests from this IP, please try again after 15 minutes'
+  message: {
+    status: 'error',
+    code: 429,
+    message: 'Too many requests',
+    details: 'Please try again later'
+  }
 });
 
 // Apply rate limiting to API routes
@@ -1022,133 +1041,141 @@ app.get('/api/lessons/:id/download', async (req, res) => {
   }
 });
 
+// Function to broadcast active users to all connected clients
+async function broadcastActiveUsers() {
+  try {
+    // Fetch all active users from the database
+    const [activeUsers] = await promisePool.query(
+      'SELECT id, username, surname, role, active FROM users WHERE active = 1'
+    );
+    
+    console.log('Broadcasting active users:', activeUsers);
+    
+    const message = JSON.stringify({
+      type: 'active_users_update',
+      users: activeUsers
+    });
+
+    // Send to all connected clients
+    for (const client of clients.values()) {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(message);
+      }
+    }
+  } catch (error) {
+    console.error('Error broadcasting active users:', error);
+  }
+}
+
 // Handle WebSocket connections
-wss.on('connection', (ws) => {
-  console.log('Client connected to WebSocket');
+wss.on('connection', async (ws, req) => {
+  console.log('New WebSocket connection established');
   
-  // Handle messages from clients
-  ws.on('message', (message) => {
+  ws.isAlive = true;
+  ws.on('pong', () => {
+    ws.isAlive = true;
+  });
+
+  ws.on('message', async (message) => {
     try {
       const data = JSON.parse(message);
-      
-      // Handle authentication
-      if (data.type === 'authenticate' && data.userId) {
-        // Store the client with their user ID
-        clients.set(data.userId, ws);
-        console.log(`User ${data.userId} authenticated via WebSocket`);
-        
-        // Send active users to the newly connected client
-        sendActiveUsers();
-      }
-      
-      // Handle lesson start
-      if (data.type === 'startLesson') {
-        console.log('Lesson start request received:', data);
-        
-        // Broadcast lesson started notification to all clients
-        const lessonStartedMessage = JSON.stringify({
-          type: 'lessonStarted',
-          lessonId: data.lessonId,
-          lessonName: data.lessonName,
-          teacherName: data.teacherName,
-          duration: data.duration,
-          startTime: new Date()
-        });
-        
-        for (const client of clients.values()) {
-          if (client.readyState === WebSocket.OPEN) {
-            client.send(lessonStartedMessage);
-          }
+      console.log('Received WebSocket message:', data);
+
+      if (data.type === 'authenticate') {
+        const userId = data.userId;
+        if (!userId) {
+          console.error('Authentication failed: No user ID provided');
+          return;
         }
-        
-        // Store the lesson status in the database
-        promisePool.query(
-          'INSERT INTO lesson_sessions (lesson_id, started_by, duration, start_time) VALUES (?, ?, ?, NOW()) ON DUPLICATE KEY UPDATE duration = ?, start_time = NOW()',
-          [data.lessonId, data.userId || null, data.duration, data.duration]
-        ).catch(err => {
-          console.error('Error storing lesson session:', err);
-        });
-      }
-      
-      // Handle lesson end
-      if (data.type === 'endLesson') {
-        console.log('Lesson end request received:', data);
-        
-        // Broadcast lesson ended notification to all clients
-        const lessonEndedMessage = JSON.stringify({
-          type: 'lessonEnded',
-          lessonId: data.lessonId,
-          teacherName: data.teacherName
-        });
-        
-        for (const client of clients.values()) {
-          if (client.readyState === WebSocket.OPEN) {
-            client.send(lessonEndedMessage);
-          }
+
+        // Store client connection with user info
+        clients.set(userId, ws);
+        console.log(`User ${userId} authenticated via WebSocket`);
+
+        try {
+          // Update user's active status in database
+          await promisePool.query(
+            'UPDATE users SET active = 1 WHERE id = ?',
+            [userId]
+          );
+
+          // Broadcast updated active users list to all clients
+          await broadcastActiveUsers();
+        } catch (error) {
+          console.error('Database error during authentication:', error);
         }
-        
-        // Update the lesson status in the database
-        promisePool.query(
-          'UPDATE lesson_sessions SET end_time = NOW() WHERE lesson_id = ? AND end_time IS NULL',
-          [data.lessonId]
-        ).catch(err => {
-          console.error('Error updating lesson session:', err);
-        });
       }
     } catch (error) {
       console.error('Error processing WebSocket message:', error);
     }
   });
-  
-  // Handle disconnection
-  ws.on('close', () => {
-    console.log('Client disconnected from WebSocket');
+
+  ws.on('close', async () => {
+    console.log('WebSocket connection closed');
     
-    // Remove client from the map
+    // Find and remove the disconnected client
     for (const [userId, client] of clients.entries()) {
       if (client === ws) {
-        clients.delete(userId);
         console.log(`User ${userId} disconnected`);
+        
+        try {
+          // Update user's active status in database
+          await promisePool.query(
+            'UPDATE users SET active = 0 WHERE id = ?',
+            [userId]
+          );
+
+          // Remove from clients map
+          clients.delete(userId);
+
+          // Broadcast updated active users list to all clients
+          await broadcastActiveUsers();
+        } catch (error) {
+          console.error('Database error during disconnection:', error);
+        }
         break;
       }
     }
-    
-    // Send updated active users list to all clients
-    sendActiveUsers();
+  });
+
+  ws.on('error', (error) => {
+    console.error('WebSocket error:', error);
   });
 });
 
-// Function to send active users to all connected clients
-function sendActiveUsers() {
-  // Get all active users from the database
-  promisePool.query('SELECT id, username, role, active FROM users WHERE active = TRUE')
-    .then(([rows]) => {
-      const activeUsers = rows.map(user => ({
-        id: user.id.toString(),
-        username: user.username,
-        role: user.role,
-        Active: user.active
-      }));
-      
-      // Broadcast to all connected clients
-      const message = JSON.stringify({
-        type: 'active_users_update',
-        users: activeUsers
-      });
-      
-      for (const client of clients.values()) {
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(message);
-        }
+// Ping all clients every 30 seconds to keep connections alive and verify active status
+const pingInterval = setInterval(async () => {
+  try {
+    // Check each client's connection
+    for (const [userId, ws] of clients.entries()) {
+      if (ws.isAlive === false) {
+        console.log(`Terminating inactive connection for user ${userId}`);
+        await promisePool.query(
+          'UPDATE users SET active = 0 WHERE id = ?',
+          [userId]
+        );
+        clients.delete(userId);
+        ws.terminate();
+        continue;
       }
-    })
-    .catch(error => {
-      console.error('Error fetching active users:', error);
-    });
-}
+      
+      ws.isAlive = false;
+      ws.ping();
+    }
+
+    // Broadcast updated active users list
+    await broadcastActiveUsers();
+  } catch (error) {
+    console.error('Error in ping interval:', error);
+  }
+}, 30000);
+
+// Clean up interval on server shutdown
+wss.on('close', () => {
+  clearInterval(pingInterval);
+});
 
 // Start the server
-const PORT = process.env.PORT || 3001;
 httpServer.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`API available at http://localhost:${PORT}/api`);

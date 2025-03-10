@@ -5,6 +5,7 @@ import { FullPageLoading } from '@/components/ui/loading';
 interface User {
   id: string;
   username: string;
+  surname?: string;
   email: string;
   role: 'student' | 'lead_student' | 'admin';
 }

@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Send, Bot, User, FileText, Loader2, BookOpen, MessageSquare, FileIcon, Download, ChevronLeft, ChevronRight } from "lucide-react";
+import { Send, Bot, User, FileText, Loader2, BookOpen, MessageSquare, FileIcon, Download, ChevronLeft, ChevronRight, Settings } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -12,6 +12,7 @@ import { api } from "@/server/api";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
 import { useWebSocket } from '@/contexts/WebSocketContext';
+import { Link } from 'react-router-dom';
 import './LessonChatbot.css';
 
 interface Message {
@@ -225,63 +226,93 @@ export default function LessonChatbot({
 
   return (
     <div className="lesson-chatbot-container">
-      <div className="lesson-header">
-        <div className="lesson-title">
-          <BookOpen size={20} />
-          <h2>Deep Learning - Week 1</h2>
-        </div>
-      </div>
-
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="lesson-tabs">
-        <TabsList className="lesson-tabs-list">
-          <TabsTrigger value="content" className="lesson-tab">
-            <FileText size={16} />
-            <span>Lesson Content</span>
-          </TabsTrigger>
-          <TabsTrigger value="chat" className="lesson-tab">
-            <MessageSquare size={16} />
-            <span>AI Assistant</span>
-          </TabsTrigger>
-        </TabsList>
+      <div className="lesson-layout">
         
-        <TabsContent value="content" className="lesson-content-tab">
-          <Card className="lesson-content-card">
-            <CardHeader className="lesson-content-header">
-              <CardTitle className="lesson-content-title">
-                <div className="content-title-text">Lesson 1.1: Introduction to Deep Learning</div>
-                <div className="content-pagination">
-                  <button className="pagination-btn" disabled={currentPage <= 1}>
-                    <ChevronLeft size={16} />
-                  </button>
-                  <span className="pagination-info">Page {currentPage} of {totalPages}</span>
-                  <button className="pagination-btn" disabled={currentPage >= totalPages}>
-                    <ChevronRight size={16} />
-                  </button>
-                </div>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="lesson-content-body">
-              <div className="lesson-pdf-content">
-                <div className="pdf-content">
-                  <div className="pdf-page">
-                    <h3>What is Deep Learning?</h3>
-                    <p>Deep learning is a subfield of machine learning that deals with algorithms inspired by the structure and function of the human brain, known as artificial neural networks. It is widely used for tasks such as image recognition, speech processing, and natural language understanding.</p>
-                    
-                    <h4>Key Concepts</h4>
-                    <ul>
-                      <li><strong>Neural Networks:</strong> Computational models inspired by biological neural networks that are used to approximate complex functions.</li>
-                      <li><strong>Activation Functions:</strong> Mathematical functions applied to the outputs of neurons to introduce non-linearity, enabling the network to learn complex patterns.</li>
-                      <li><strong>Supervised vs. Unsupervised Learning:</strong>
+        <div className="lesson-main-content">
+          <div className="lesson-header">
+            <div className="lesson-title">
+              <div className="lesson-icon-container">
+                <BookOpen size={20} className="lesson-icon" />
+              </div>
+              <div className="lesson-info">
+                <h2>{lessonTitle || "Deep Learning - Week 1"}</h2>
+                <p className="lesson-subtitle">Introduction to Neural Networks</p>
+              </div>
+            </div>
+            <div className="lesson-actions">
+              {user?.role === 'admin' && (
+                <Link to="/admin" className="lesson-action-button admin-link" title="Admin Panel">
+                  <Settings size={18} />
+                </Link>
+              )}
+              <a href="#" className="lesson-action-button" title="Download PDF">
+                <Download size={18} />
+              </a>
+            </div>
+          </div>
+
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="lesson-tabs">
+            <TabsList className="lesson-tabs-list">
+              <TabsTrigger value="content" className="lesson-tab">
+                <FileText size={16} />
+                <span>Lesson Content</span>
+              </TabsTrigger>
+              <TabsTrigger value="chat" className="lesson-tab">
+                <MessageSquare size={16} />
+                <span>AI Assistant</span>
+              </TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="content" className="lesson-content-tab">
+              <Card className="lesson-content-card">
+                <CardHeader className="lesson-content-header">
+                  <CardTitle className="lesson-content-title">
+                    <div className="content-title-text">
+                      <span className="lesson-section-label">Lesson 1.1</span>
+                      <h3>Introduction to Deep Learning</h3>
+                    </div>
+                    <div className="content-pagination">
+                      <button className="pagination-btn" disabled={currentPage <= 1}>
+                        <ChevronLeft size={16} />
+                      </button>
+                      <span className="pagination-info">Page {currentPage} of {totalPages}</span>
+                      <button className="pagination-btn" disabled={currentPage >= totalPages}>
+                        <ChevronRight size={16} />
+                      </button>
+                    </div>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="lesson-content-body">
+                  <div className="lesson-pdf-content">
+                    <div className="table-of-contents">
+                      <h4>Contents</h4>
+                      <ul>
+                        <li className="toc-item active">1. What is Deep Learning?</li>
+                        <li className="toc-item">2. Key Concepts</li>
+                        <li className="toc-item">3. Neural Networks</li>
+                        <li className="toc-item">4. Code Examples</li>
+                      </ul>
+                    </div>
+                    <div className="pdf-content">
+                      <div className="pdf-page">
+                        <h3>What is Deep Learning?</h3>
+                        <p>Deep learning is a subfield of machine learning that deals with algorithms inspired by the structure and function of the human brain, known as artificial neural networks. It is widely used for tasks such as image recognition, speech processing, and natural language understanding.</p>
+                        
+                        <h4>Key Concepts</h4>
                         <ul>
-                          <li>Supervised Learning: The model is trained on labeled data.</li>
-                          <li>Unsupervised Learning: The model works with data that has no labels, often finding hidden structures or patterns.</li>
+                          <li><strong>Neural Networks:</strong> Computational models inspired by biological neural networks that are used to approximate complex functions.</li>
+                          <li><strong>Activation Functions:</strong> Mathematical functions applied to the outputs of neurons to introduce non-linearity, enabling the network to learn complex patterns.</li>
+                          <li><strong>Supervised vs. Unsupervised Learning:</strong>
+                            <ul>
+                              <li>Supervised Learning: The model is trained on labeled data.</li>
+                              <li>Unsupervised Learning: The model works with data that has no labels, often finding hidden structures or patterns.</li>
+                            </ul>
+                          </li>
                         </ul>
-                      </li>
-                    </ul>
-                    
-                    <h4>Code Example: Building a Simple Neural Network in TensorFlow</h4>
-                    <pre className="code-block">
-                      <code>
+                        
+                        <h4>Code Example: Building a Simple Neural Network in TensorFlow</h4>
+                        <pre className="code-block">
+                          <code>
 {`python
 import tensorflow as tf
 from tensorflow import keras
@@ -294,92 +325,116 @@ model = keras.Sequential([
 
 # Compile the model
 model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])`}
-                      </code>
-                    </pre>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        
-        <TabsContent value="chat" className="lesson-chat-tab">
-          <Card className="chat-card">
-            <CardHeader className="chat-header">
-              <CardTitle className="chat-title">
-                <Bot size={18} />
-                <span>AI Assistant for "Introduction to Deep Learning"</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="chat-content">
-              <ScrollArea className="chat-messages">
-                {messages.length === 0 ? (
-                  <div className="empty-chat">
-                    <Bot size={40} />
-                    <h3>Ask me anything about this lesson!</h3>
-                    <p>I can help explain concepts, provide examples, or answer questions about deep learning.</p>
-                  </div>
-                ) : (
-                  messages.map((message) => (
-                    <div 
-                      key={message.id} 
-                      className={`chat-message ${message.sender === 'user' ? 'user-message' : 'ai-message'}`}
-                    >
-                      <div className="message-avatar">
-                        {message.sender === 'user' ? (
-                          <Avatar>
-                            <AvatarFallback>{user?.username?.charAt(0).toUpperCase() || 'U'}</AvatarFallback>
-                          </Avatar>
-                        ) : (
-                          <Avatar>
-                            <AvatarFallback><Bot size={18} /></AvatarFallback>
-                          </Avatar>
-                        )}
-                      </div>
-                      <div className="message-content">
-                        <div className="message-sender">
-                          {message.sender === 'user' ? user?.username || 'You' : 'AI Assistant'}
-                        </div>
-                        <div className="message-text">
-                          {message.content}
-                        </div>
-                        <div className="message-time">
-                          {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </div>
+                          </code>
+                        </pre>
                       </div>
                     </div>
-                  ))
-                )}
-                {isLoading && (
-                  <div className="loading-message">
-                    <Loader2 className="animate-spin" />
-                    <span>AI is thinking...</span>
                   </div>
-                )}
-                <div ref={messagesEndRef} />
-              </ScrollArea>
-              
-              <form onSubmit={handleSubmit} className="chat-input-form">
-                <Textarea
-                  value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Ask a question about this lesson..."
-                  className="chat-input"
-                  disabled={isLoading}
-                />
-                <Button 
-                  type="submit" 
-                  className="send-button" 
-                  disabled={isLoading || !inputValue.trim()}
-                >
-                  {isLoading ? <Loader2 className="animate-spin" /> : <Send />}
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+                </CardContent>
+              </Card>
+            </TabsContent>
+            
+            <TabsContent value="chat" className="lesson-chat-tab">
+              <Card className="chat-card">
+                <CardHeader className="chat-header">
+                  <CardTitle className="chat-title">
+                    <div className="chat-title-icon">
+                      <Bot size={18} />
+                    </div>
+                    <div className="chat-title-text">
+                      <span>AI Learning Assistant</span>
+                      <span className="chat-subtitle">Powered by Claude AI</span>
+                    </div>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="chat-content">
+                  <ScrollArea className="chat-messages">
+                    {messages.length === 0 ? (
+                      <div className="empty-chat">
+                        <div className="empty-chat-icon">
+                          <Bot size={40} />
+                        </div>
+                        <h3>Your personal AI tutor is ready to help</h3>
+                        <p>Ask questions about concepts, request examples, or get help with exercises related to this lesson.</p>
+                        <div className="suggested-prompts">
+                          <Button variant="outline" className="prompt-button" onClick={() => setInputValue("Explain neural networks in simple terms")}>
+                            Explain neural networks in simple terms
+                          </Button>
+                          <Button variant="outline" className="prompt-button" onClick={() => setInputValue("Show me a code example of a simple neural network")}>
+                            Show me a code example
+                          </Button>
+                          <Button variant="outline" className="prompt-button" onClick={() => setInputValue("What are activation functions?")}>
+                            What are activation functions?
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      messages.map((message) => (
+                        <div 
+                          key={message.id} 
+                          className={`chat-message ${message.sender === 'user' ? 'user-message' : 'ai-message'}`}
+                        >
+                          <div className="message-avatar">
+                            {message.sender === 'user' ? (
+                              <Avatar className="user-avatar">
+                                <AvatarFallback>{user?.username?.charAt(0).toUpperCase() || 'U'}</AvatarFallback>
+                              </Avatar>
+                            ) : (
+                              <Avatar className="ai-avatar">
+                                <AvatarFallback><Bot size={18} /></AvatarFallback>
+                              </Avatar>
+                            )}
+                          </div>
+                          <div className="message-content">
+                            <div className="message-sender">
+                              {message.sender === 'user' ? user?.username || 'You' : 'AI Assistant'}
+                            </div>
+                            <div className="message-text">
+                              {message.content}
+                            </div>
+                            <div className="message-time">
+                              {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                    {isLoading && (
+                      <div className="loading-message">
+                        <div className="typing-indicator">
+                          <span></span>
+                          <span></span>
+                          <span></span>
+                        </div>
+                        <span>AI is thinking...</span>
+                      </div>
+                    )}
+                    <div ref={messagesEndRef} />
+                  </ScrollArea>
+                  
+                  <form onSubmit={handleSubmit} className="chat-input-form">
+                    <Textarea
+                      value={inputValue}
+                      onChange={(e) => setInputValue(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      placeholder="Ask me anything about this lesson..."
+                      className="chat-input"
+                      disabled={isLoading}
+                    />
+                    <Button 
+                      type="submit" 
+                      className="send-button" 
+                      disabled={isLoading || !inputValue.trim()}
+                    >
+                      {isLoading ? <Loader2 className="animate-spin" /> : <Send size={18} />}
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        </div>
+      </div>
     </div>
   );
 }

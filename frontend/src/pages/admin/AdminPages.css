@@ -93,6 +93,11 @@
 .action-buttons {
   display: flex;
   gap: 0.5rem;
+  align-items: center;
+}
+
+.action-buttons.justify-end {
+  justify-content: flex-end;
 }
 
 .make-lead-btn {
@@ -103,10 +108,24 @@
   border-radius: 0.25rem;
   cursor: pointer;
   font-size: 0.75rem;
+  display: flex;
+  align-items: center;
 }
 
 .make-lead-btn:hover {
   background-color: hsl(var(--primary-foreground));
+}
+
+.make-lead-btn.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  background-color: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+}
+
+.delete-btn {
+  display: flex;
+  align-items: center;
 }
 
 /* File upload styles */

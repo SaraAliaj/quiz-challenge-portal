@@ -4,36 +4,55 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from '@/components/ui/use-toast';
 import { api } from '@/server/api';
-import { Trash2, Crown } from 'lucide-react';
+import { Trash2, Crown, Loader2 } from 'lucide-react';
 import './AdminPages.css';
 
 interface User {
   id: number;
   username: string;
-  surname: string | null;
+  surname: string;
   email: string;
   role: string;
-  active: boolean;
 }
 
 const ManageStudents = () => {
   const [students, setStudents] = useState<User[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState<number | null>(null);
-
-  // Fetch students on component mount
-  useEffect(() => {
-    fetchStudents();
-  }, []);
 
   const fetchStudents = async () => {
     setIsLoading(true);
     try {
-      // In a real implementation, this would fetch from an API
       const response = await api.getUsers();
+      console.log('Users response:', response);
+      
+      // Handle different response formats
+      let userData = [];
+      
+      if (response && response.data) {
+        userData = Array.isArray(response.data) ? response.data : [];
+      } else if (response && Array.isArray(response)) {
+        userData = response;
+      } else if (response && typeof response === 'object') {
+        Object.keys(response).forEach(key => {
+          if (Array.isArray(response[key])) {
+            userData = response[key];
+          }
+        });
+      }
+      
       // Filter out admin users
-      const filteredUsers = (response.data || []).filter((user: User) => user.role !== 'admin');
+      const filteredUsers = userData.filter((user: User) => user && user.role !== 'admin');
+      
+      console.log('Filtered users:', filteredUsers);
       setStudents(filteredUsers);
+      
+      if (filteredUsers.length === 0) {
+        toast({
+          title: 'No students found',
+          description: 'No student accounts were found in the system.',
+        });
+      }
     } catch (error) {
       console.error('Failed to fetch students:', error);
       toast({
@@ -41,15 +60,20 @@ const ManageStudents = () => {
         description: 'Failed to load students. Please try again.',
         variant: 'destructive',
       });
+      setStudents([]);
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Fetch students on mount and after every successful action
+  useEffect(() => {
+    fetchStudents();
+  }, []);
+
   const handleMakeLeadStudent = async (userId: number) => {
     setIsProcessing(userId);
     try {
-      // In a real implementation, this would send to an API
       await api.updateUserRole(userId, 'lead_student');
       
       toast({
@@ -57,14 +81,8 @@ const ManageStudents = () => {
         description: 'User role updated to Lead Student!',
       });
       
-      // Update local state
-      setStudents(prev => 
-        prev.map(student => 
-          student.id === userId 
-            ? { ...student, role: 'lead_student' } 
-            : student
-        )
-      );
+      // Refresh the student list
+      await fetchStudents();
     } catch (error) {
       console.error('Failed to update user role:', error);
       toast({
@@ -84,25 +102,15 @@ const ManageStudents = () => {
     
     setIsProcessing(userId);
     try {
-      try {
-        // Try to use the API endpoint if it exists
-        await api.deleteUser(userId);
-      } catch (error) {
-        console.error('API endpoint for deleting users might not be implemented yet:', error);
-        // For now, just update the local state as if the deletion was successful
-        toast({
-          title: 'Note',
-          description: 'The delete functionality is not fully implemented on the server yet. This is just a UI simulation.',
-        });
-      }
+      await api.deleteUser(userId);
       
       toast({
         title: 'Success',
         description: 'Student deleted successfully!',
       });
       
-      // Update local state
-      setStudents(prev => prev.filter(student => student.id !== userId));
+      // Refresh the student list
+      await fetchStudents();
     } catch (error) {
       console.error('Failed to delete student:', error);
       toast({
@@ -126,60 +134,55 @@ const ManageStudents = () => {
           </CardHeader>
           <CardContent>
             {isLoading ? (
-              <div className="loading-indicator">Loading students...</div>
+              <div className="loading-indicator">
+                <Loader2 className="h-8 w-8 animate-spin text-gray-400 mr-2" />
+                Loading students...
+              </div>
             ) : students.length === 0 ? (
-              <div className="empty-state">No students found.</div>
+              <div className="empty-state">
+                No students found. Students will appear here once they register.
+              </div>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>ID</TableHead>
                     <TableHead>Username</TableHead>
                     <TableHead>Surname</TableHead>
-                    <TableHead>Email</TableHead>
                     <TableHead>Role</TableHead>
-                    <TableHead>Status</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {students.map((student) => (
                     <TableRow key={student.id}>
-                      <TableCell>{student.id}</TableCell>
                       <TableCell>{student.username}</TableCell>
                       <TableCell>{student.surname || '-'}</TableCell>
-                      <TableCell>{student.email}</TableCell>
                       <TableCell>
                         <span className={`role-badge ${student.role === 'lead_student' ? 'lead-role' : 'student-role'}`}>
                           {student.role === 'lead_student' ? 'Lead Student' : 'Student'}
                         </span>
                       </TableCell>
                       <TableCell>
-                        <span className={`status-badge ${student.active ? 'active-status' : 'inactive-status'}`}>
-                          {student.active ? 'Active' : 'Inactive'}
-                        </span>
-                      </TableCell>
-                      <TableCell>
                         <div className="action-buttons">
-                          {student.role !== 'lead_student' && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleMakeLeadStudent(student.id)}
-                              disabled={isProcessing === student.id}
-                              className="make-lead-btn"
-                            >
-                              <Crown size={16} className="mr-1" />
-                              Make Lead
-                            </Button>
-                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleMakeLeadStudent(student.id)}
+                            disabled={isProcessing === student.id || student.role === 'lead_student'}
+                            className="make-lead-btn"
+                          >
+                            <Crown className="h-4 w-4 mr-2" />
+                            Make Lead
+                          </Button>
                           <Button
                             variant="destructive"
                             size="sm"
                             onClick={() => handleDeleteStudent(student.id)}
                             disabled={isProcessing === student.id}
+                            className="delete-btn"
                           >
-                            <Trash2 size={16} />
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete
                           </Button>
                         </div>
                       </TableCell>

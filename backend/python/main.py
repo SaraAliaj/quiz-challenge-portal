@@ -736,7 +736,7 @@ async def download_lesson_file(lesson_id: str):
 # Add endpoint to fetch all lessons
 @app.get("/api/lessons")
 async def get_all_lessons():
-    """Get all lessons with their course, week, and day information"""
+    """Get all lessons with their course and week information"""
     try:
         # Connect to the database
         conn = get_db_connection()
@@ -751,18 +751,16 @@ async def get_all_lessons():
             
         cursor = conn.cursor(pymysql.cursors.DictCursor)  # Use DictCursor to get results as dictionaries
         
-        # Query to get all lessons with their course, week, and day information
+        # Query to get all lessons with their course and week information
         query = """
         SELECT 
             l.id, l.lesson_name, l.file_path, 
             l.course_id, c.name as course_name,
-            l.week_id, w.name as week_name,
-            l.day_id, d.name as day_name
+            l.week_id, w.name as week_name
         FROM lessons l
-        JOIN courses c ON l.course_id = c.id
-        JOIN weeks w ON l.week_id = w.id
-        JOIN days d ON l.day_id = d.id
-        ORDER BY c.id, w.id, d.id, l.id
+        LEFT JOIN courses c ON l.course_id = c.id
+        LEFT JOIN weeks w ON l.week_id = w.id
+        ORDER BY c.id, w.id, l.id
         """
         
         try:

@@ -13,10 +13,15 @@ import {
   Loader2,
   Users,
   Calendar,
+  Crown,
+  LogOut,
+  Settings,
+  Circle
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { api } from "@/server/api";
-import ActiveUsersSidebar from "@/components/ActiveUsersSidebar";
+import { useAuth } from "@/contexts/AuthContext";
+import { useWebSocket } from "@/contexts/WebSocketContext";
 import { useToast } from "@/components/ui/use-toast";
 import {
   Dialog,
@@ -63,6 +68,8 @@ export default function Sidebar() {
   const [showDurationDialog, setShowDurationDialog] = useState(false);
   const [selectedDuration, setSelectedDuration] = useState<string>("");
   const [selectedLessonToStart, setSelectedLessonToStart] = useState<{id: string, name: string} | null>(null);
+  const { user, logout } = useAuth();
+  const { activeUsers = [], isConnected } = useWebSocket();
 
   useEffect(() => {
     const fetchCourses = async () => {
@@ -86,16 +93,20 @@ export default function Sidebar() {
     fetchCourses();
   }, []);
 
-  const toggleCourse = (courseId: number) => {
-    setExpandedCourse(expandedCourse === courseId ? null : courseId);
+  const toggleCourse = (courseId: string) => {
+    const courseIdNum = parseInt(courseId.replace('course-', ''));
+    setExpandedCourse(expandedCourse === courseIdNum ? null : courseIdNum);
     setExpandedWeek(null);
   };
 
-  const toggleWeek = (courseId: number, weekId: number) => {
+  const toggleWeek = (courseId: string, weekId: string) => {
+    const courseIdNum = parseInt(courseId.replace('course-', ''));
+    const weekIdNum = parseInt(weekId.replace('week-', ''));
+    
     setExpandedWeek(
-      expandedWeek?.courseId === courseId && expandedWeek?.weekId === weekId
+      expandedWeek?.courseId === courseIdNum && expandedWeek?.weekId === weekIdNum
         ? null
-        : { courseId, weekId }
+        : { courseId: courseIdNum, weekId: weekIdNum }
     );
   };
 
@@ -128,10 +139,11 @@ export default function Sidebar() {
 
   return (
     <div className={`h-screen ${collapsed ? 'w-16' : 'w-64'} bg-white border-r border-gray-200 flex flex-col transition-all duration-300 ease-in-out relative`}>
-      <div className="p-4 flex items-center justify-between">
+      {/* Logo and Title Section */}
+      <div className="p-4 flex items-center justify-between border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
         <Link to="/" className="flex items-center space-x-2">
-          <GraduationCap className={`h-6 w-6 text-black ${collapsed ? 'mx-auto' : ''}`} />
-          <span className={`font-bold text-xl text-black transition-opacity duration-300 ${collapsed ? 'opacity-0 w-0' : 'opacity-100'}`}>
+          <GraduationCap className={`h-8 w-8 text-indigo-600 ${collapsed ? 'mx-auto' : ''}`} />
+          <span className={`font-bold text-xl text-indigo-700 transition-opacity duration-300 ${collapsed ? 'opacity-0 w-0' : 'opacity-100'}`}>
             AI School
           </span>
         </Link>
@@ -143,32 +155,104 @@ export default function Sidebar() {
         </button>
       </div>
       
-      {/* User Info Section - Placeholder */}
+      {/* User Info Section */}
       <div className="p-4 border-b border-gray-200">
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
-            <span className="text-gray-600 font-medium">U</span>
-          </div>
-          {!collapsed && (
-            <div>
-              <p className="font-medium text-black">User Name</p>
-              <p className="text-xs text-gray-500">Student</p>
+        {/* Use the actual user data from auth context */}
+        {(() => {
+          const isLeadStudent = user?.role === 'lead_student';
+          const isAdmin = user?.role === 'admin';
+          
+          return (
+            <div className="flex items-center space-x-3">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                isLeadStudent 
+                  ? 'bg-gradient-to-r from-amber-200 to-yellow-400 border border-amber-300 shadow-sm' 
+                  : isAdmin
+                    ? 'bg-gradient-to-r from-purple-200 to-purple-400 border border-purple-300 shadow-sm'
+                    : 'bg-gray-200'
+              }`}>
+                {isLeadStudent ? (
+                  <Crown className="h-5 w-5 text-amber-700" />
+                ) : isAdmin ? (
+                  <Settings className="h-5 w-5 text-purple-700" />
+                ) : (
+                  <span className="text-gray-600 font-medium">{user?.username?.charAt(0) || 'U'}</span>
+                )}
+              </div>
+              {!collapsed && (
+                <div>
+                  <p className="font-medium text-black">{user?.username || 'User'}</p>
+                  <div className={`text-xs flex items-center ${
+                    isLeadStudent ? 'text-amber-700' : isAdmin ? 'text-purple-700' : 'text-gray-500'
+                  }`}>
+                    {isLeadStudent && <Crown className="h-3 w-3 mr-1 text-amber-500" />}
+                    {isAdmin && <Settings className="h-3 w-3 mr-1 text-purple-500" />}
+                    <span>{isLeadStudent ? 'Lead Student' : isAdmin ? 'Administrator' : (user?.role || 'Student')}</span>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          );
+        })()}
       </div>
       
       {/* Active Users Section */}
       <div className="border-b border-gray-200">
-        <div className={`p-4 flex items-center ${collapsed ? 'justify-center' : 'justify-between'}`}>
+        <div className={`p-4 ${collapsed ? 'justify-center' : 'justify-between'} flex items-center`}>
           <div className="flex items-center">
-            <Users className={`h-5 w-5 text-black ${collapsed ? '' : 'mr-2'}`} />
-            {!collapsed && <span className="font-semibold text-sm text-black">Active Users</span>}
+            <Users className={`h-5 w-5 text-gray-600 ${collapsed ? '' : 'mr-2'}`} />
+            {!collapsed && (
+              <div className="flex items-center justify-between w-full">
+                <span className="text-sm font-medium">Online Users</span>
+                <span className="text-xs text-gray-500 ml-2">({activeUsers.length})</span>
+              </div>
+            )}
           </div>
+          {!collapsed && (
+            <div className="flex items-center">
+              <div className={`h-2 w-2 rounded-full mr-2 ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+              <span className="text-xs text-gray-500">{isConnected ? 'Connected' : 'Disconnected'}</span>
+            </div>
+          )}
         </div>
-        <div className={`${collapsed ? 'px-2' : 'px-4'} pb-4 max-h-40 overflow-y-auto`}>
-          <ActiveUsersSidebar collapsed={collapsed} />
-        </div>
+        {!collapsed && activeUsers.length > 0 && (
+          <div className="max-h-48 overflow-y-auto px-4 pb-4">
+            <div className="space-y-2">
+              {activeUsers.map((activeUser) => (
+                <div key={activeUser.id} className="flex items-center space-x-2">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                    activeUser.role === 'lead_student' 
+                      ? 'bg-gradient-to-r from-amber-200 to-yellow-400 border border-amber-300' 
+                      : activeUser.role === 'admin'
+                        ? 'bg-gradient-to-r from-purple-200 to-purple-400 border border-purple-300'
+                        : 'bg-gray-200'
+                  }`}>
+                    <span className="text-sm font-medium">
+                      {activeUser.username.charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center">
+                      <p className="text-sm font-medium truncate">{activeUser.username}</p>
+                      {activeUser.role === 'lead_student' && (
+                        <Crown className="h-3 w-3 ml-1 text-amber-500" />
+                      )}
+                    </div>
+                    <div className="flex items-center text-xs text-gray-500">
+                      <Circle className="h-2 w-2 mr-1 fill-green-500 text-green-500" />
+                      <span>{activeUser.role.replace('_', ' ')}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {!collapsed && activeUsers.length === 0 && (
+          <div className="text-sm text-gray-500 text-center py-4">
+            No users online
+          </div>
+        )}
       </div>
       
       <nav className="flex-1 overflow-y-auto px-2 py-4">
@@ -178,6 +262,17 @@ export default function Sidebar() {
             <MessageCircle className={`h-5 w-5 text-black ${collapsed ? '' : 'mr-2'}`} />
             {!collapsed && <span className="text-black">AI Chat</span>}
           </Link>
+          
+          {/* Admin Menu - Only visible for admin users */}
+          {user?.role === 'admin' && (
+            <Link 
+              to="/admin" 
+              className={`flex items-center ${collapsed ? 'justify-center' : 'justify-start'} px-3 py-2 text-sm rounded-lg hover:bg-gray-100 transition-colors`}
+            >
+              <Settings className={`h-5 w-5 text-purple-600 ${collapsed ? '' : 'mr-2'}`} />
+              {!collapsed && <span className="text-black">Admin Dashboard</span>}
+            </Link>
+          )}
           
           {/* Curriculum Section */}
           <div>
@@ -213,7 +308,7 @@ export default function Sidebar() {
                     <div key={course.id} className="space-y-1">
                       <button
                         className={`w-full flex items-center ${collapsed ? 'justify-center px-1' : 'justify-between px-3'} py-2 text-sm rounded-lg hover:bg-gray-100 transition-colors`}
-                        onClick={() => toggleCourse(parseInt(course.id))}
+                        onClick={() => toggleCourse(course.id)}
                       >
                         <span className={`text-black ${collapsed ? 'sr-only' : ''}`}>
                           {course.name}
@@ -221,19 +316,19 @@ export default function Sidebar() {
                         {!collapsed && (
                           <ChevronDown
                             className={`h-4 w-4 text-black transition-transform ${
-                              expandedCourse === parseInt(course.id) ? "transform rotate-180" : ""
+                              expandedCourse === parseInt(course.id.replace('course-', '')) ? "transform rotate-180" : ""
                             }`}
                           />
                         )}
                       </button>
                       
-                      {expandedCourse === parseInt(course.id) && (
+                      {expandedCourse === parseInt(course.id.replace('course-', '')) && (
                         <div className={`space-y-1 ${collapsed ? 'px-0' : 'pl-3'}`}>
                           {course.weeks.map((week) => (
                             <div key={week.id} className="space-y-1">
                               <button
                                 className={`w-full flex items-center ${collapsed ? 'justify-center px-1' : 'justify-between px-3'} py-2 text-sm rounded-lg hover:bg-gray-100 transition-colors`}
-                                onClick={() => toggleWeek(parseInt(course.id), parseInt(week.id))}
+                                onClick={() => toggleWeek(course.id, week.id)}
                               >
                                 <span className={`text-black ${collapsed ? 'sr-only' : ''}`}>
                                   {week.name}
@@ -241,8 +336,8 @@ export default function Sidebar() {
                                 {!collapsed && (
                                   <ChevronDown
                                     className={`h-4 w-4 text-black transition-transform ${
-                                      expandedWeek?.courseId === parseInt(course.id) &&
-                                      expandedWeek?.weekId === parseInt(week.id)
+                                      expandedWeek?.courseId === parseInt(course.id.replace('course-', '')) &&
+                                      expandedWeek?.weekId === parseInt(week.id.replace('week-', ''))
                                         ? "transform rotate-180"
                                         : ""
                                     }`}
@@ -250,8 +345,8 @@ export default function Sidebar() {
                                 )}
                               </button>
                               
-                              {expandedWeek?.courseId === parseInt(course.id) &&
-                                expandedWeek?.weekId === parseInt(week.id) && (
+                              {expandedWeek?.courseId === parseInt(course.id.replace('course-', '')) &&
+                                expandedWeek?.weekId === parseInt(week.id.replace('week-', '')) && (
                                   <div className={`space-y-1 ${collapsed ? 'px-0' : 'pl-3'}`}>
                                     {week.lessons.length > 0 ? (
                                       week.lessons.map((lesson) => (
@@ -290,26 +385,22 @@ export default function Sidebar() {
               </div>
             )}
           </div>
-
-          {/* Group Chat */}
-          <Link to="/group-chat" className={`flex items-center ${collapsed ? 'justify-center' : 'justify-start'} px-3 py-2 text-sm rounded-lg hover:bg-gray-100 transition-colors`}>
-            <Users className={`h-5 w-5 text-black ${collapsed ? '' : 'mr-2'}`} />
-            {!collapsed && <span className="text-black">Group Chat</span>}
-          </Link>
-          
-          {/* Challenges */}
-          <Link to="/challenges" className={`flex items-center ${collapsed ? 'justify-center' : 'justify-start'} px-3 py-2 text-sm rounded-lg hover:bg-gray-100 transition-colors`}>
-            <Award className={`h-5 w-5 text-black ${collapsed ? '' : 'mr-2'}`} />
-            {!collapsed && <span className="text-black">Challenges</span>}
-          </Link>
-          
-          {/* Quizzes */}
-          <Link to="/quizzes" className={`flex items-center ${collapsed ? 'justify-center' : 'justify-start'} px-3 py-2 text-sm rounded-lg hover:bg-gray-100 transition-colors`}>
-            <Trophy className={`h-5 w-5 text-black ${collapsed ? '' : 'mr-2'}`} />
-            {!collapsed && <span className="text-black">Weekly Quizzes</span>}
-          </Link>
         </div>
       </nav>
+      
+      {/* Logout Button */}
+      <div className="mt-auto p-4 border-t border-gray-200">
+        <button 
+          onClick={() => {
+            logout();
+            navigate('/login');
+          }}
+          className={`w-full flex items-center ${collapsed ? 'justify-center' : 'justify-start'} px-3 py-2 text-sm rounded-lg hover:bg-red-50 text-red-600 transition-colors`}
+        >
+          <LogOut className={`h-5 w-5 ${collapsed ? '' : 'mr-2'}`} />
+          {!collapsed && <span>Logout</span>}
+        </button>
+      </div>
       
       {/* Duration Selection Dialog */}
       <Dialog open={showDurationDialog} onOpenChange={setShowDurationDialog}>

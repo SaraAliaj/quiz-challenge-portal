@@ -47,7 +47,7 @@ import {
 } from "@/components/ui/select";
 import ActiveUsersSidebar from "@/components/ActiveUsersSidebar";
 import { WebSocketProvider } from "@/contexts/WebSocketContext";
-import Sidebar from "@/components/Sidebar";
+import Sidebar from "@/components/layout/Sidebar";
 
 // Define types for our data structure
 interface Lesson {
@@ -455,6 +455,59 @@ export default function Layout() {
           </div>
         )}
       </div>
+      
+      {/* Duration Selection Dialog */}
+      <Dialog open={showDurationDialog} onOpenChange={setShowDurationDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-black">Select Lesson Duration</DialogTitle>
+          </DialogHeader>
+          <div className="p-4">
+            <p className="text-sm text-gray-600 mb-4">
+              How long would you like to study {selectedLessonToStart?.name}?
+            </p>
+            <Select value={selectedDuration} onValueChange={setSelectedDuration}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select duration" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="15">15 minutes</SelectItem>
+                <SelectItem value="30">30 minutes</SelectItem>
+                <SelectItem value="45">45 minutes</SelectItem>
+                <SelectItem value="60">60 minutes</SelectItem>
+                <SelectItem value="90">90 minutes</SelectItem>
+                <SelectItem value="120">2 hours</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowDurationDialog(false)}
+              className="border-gray-300 text-black"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (selectedLessonToStart && selectedDuration) {
+                  startLesson(
+                    selectedLessonToStart.id,
+                    selectedLessonToStart.name,
+                    parseInt(selectedDuration)
+                  );
+                  setShowDurationDialog(false);
+                  setSelectedDuration("");
+                }
+              }}
+              disabled={!selectedDuration || !selectedLessonToStart}
+              className="bg-black text-white hover:bg-gray-800"
+            >
+              Start Lesson
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </WebSocketProvider>
   );
 }

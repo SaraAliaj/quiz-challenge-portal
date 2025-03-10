@@ -1,14 +1,95 @@
 import axios from 'axios';
 
-// Create an axios instance for the Node.js backend (auth, users, etc.)
-const nodeAxiosInstance = axios.create({
-  baseURL: 'http://localhost:3001/api',
-  timeout: 10000,
+// WebSocket setup
+let ws: WebSocket | null = null;
+let wsReconnectTimer: NodeJS.Timeout | null = null;
+const WS_URL = 'ws://localhost:8000/ws';
+
+// Create WebSocket connection
+export const connectWebSocket = (userId: string, onActiveUsersUpdate: (users: any[]) => void) => {
+  if (ws) {
+    ws.close();
+  }
+
+  ws = new WebSocket(WS_URL);
+
+  ws.onopen = () => {
+    console.log('WebSocket connected');
+    // Send authentication message
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'authenticate',
+        userId: userId
+      }));
+    }
+  };
+
+  ws.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      if (data.type === 'active_users_update') {
+        onActiveUsersUpdate(data.users);
+      }
+    } catch (error) {
+      console.error('Error processing WebSocket message:', error);
+    }
+  };
+
+  ws.onclose = () => {
+    console.log('WebSocket disconnected');
+    // Attempt to reconnect after 5 seconds
+    if (wsReconnectTimer) {
+      clearTimeout(wsReconnectTimer);
+    }
+    wsReconnectTimer = setTimeout(() => {
+      connectWebSocket(userId, onActiveUsersUpdate);
+    }, 5000);
+  };
+
+  ws.onerror = (error) => {
+    console.error('WebSocket error:', error);
+  };
+};
+
+// Disconnect WebSocket
+export const disconnectWebSocket = () => {
+  if (wsReconnectTimer) {
+    clearTimeout(wsReconnectTimer);
+  }
+  if (ws) {
+    ws.close();
+    ws = null;
+  }
+};
+
+const BASE_URL = 'http://localhost:8000';
+
+// Create an axios instance for Node.js API calls
+export const nodeAxiosInstance = axios.create({
+  baseURL: BASE_URL,
   headers: {
-    'Content-Type': 'application/json'
+    'Content-Type': 'application/json',
   },
-  withCredentials: false
+  timeout: 10000,
+  withCredentials: true
 });
+
+// Add response interceptor for better error handling
+nodeAxiosInstance.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.code === 'ECONNREFUSED') {
+      console.error('Connection refused. Please ensure the backend server is running.');
+      return Promise.reject(new Error('Unable to connect to the server. Please ensure the backend server is running.'));
+    }
+    if (!error.response) {
+      console.error('Network Error:', error.message);
+      return Promise.reject(new Error('Network error - please check your connection and try again.'));
+    }
+    console.error('API Error:', error.response?.data || error.message);
+    return Promise.reject(error);
+  }
+);
 
 // Create an axios instance for the Python backend (lessons, chatbot, etc.)
 const pythonAxiosInstance = axios.create({
@@ -17,7 +98,7 @@ const pythonAxiosInstance = axios.create({
   headers: {
     'Content-Type': 'application/json'
   },
-  withCredentials: false
+  withCredentials: true
 });
 
 // Add a request interceptor to include the auth token in all requests
@@ -31,27 +112,6 @@ nodeAxiosInstance.interceptors.request.use(
   },
   (error) => {
     return Promise.reject(error);
-  }
-);
-
-// Add a response interceptor to handle errors
-nodeAxiosInstance.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response) {
-      // The request was made and the server responded with a status code
-      // that falls out of the range of 2xx
-      console.error('Server error:', error.response.data);
-      return Promise.reject(error);
-    } else if (error.request) {
-      // The request was made but no response was received
-      console.error('Network error:', error);
-      return Promise.reject(new Error(`Network error - please check if the backend server is running. Details: ${error.message}`));
-    } else {
-      // Something happened in setting up the request that triggered an Error
-      console.error('Request error:', error.message);
-      return Promise.reject(error);
-    }
   }
 );
 
@@ -73,11 +133,11 @@ pythonAxiosInstance.interceptors.response.use(
 );
 
 // API functions
-const api = {
+export const api = {
   // Auth functions (Node.js backend)
   login: async (email: string, password: string) => {
     try {
-      const response = await nodeAxiosInstance.post('/auth/login', { email, password });
+      const response = await nodeAxiosInstance.post('/api/auth/login', { email, password });
       return response.data;
     } catch (error) {
       console.error('Login failed:', error);
@@ -87,7 +147,7 @@ const api = {
 
   register: async (username: string, email: string, password: string) => {
     try {
-      const response = await nodeAxiosInstance.post('/auth/register', { username, email, password });
+      const response = await nodeAxiosInstance.post('/api/auth/register', { username, email, password });
       return response.data;
     } catch (error) {
       console.error('Registration failed:', error);
@@ -97,7 +157,7 @@ const api = {
 
   verifyToken: async () => {
     try {
-      const response = await nodeAxiosInstance.get('/auth/verify');
+      const response = await nodeAxiosInstance.get('/api/auth/verify');
       return response.data;
     } catch (error) {
       console.error('Token verification failed:', error);
@@ -147,13 +207,27 @@ const api = {
         const lessons = (lessonsResponse.data.data || []) as ApiLesson[];
         console.log('Extracted lessons data:', lessons);
 
-        if (!lessons || lessons.length === 0) {
+        // The response format might be { data } or just the data array
+        let lessonsData;
+        if (lessonsResponse.data.data) {
+          // Format: { data: [...] }
+          lessonsData = lessonsResponse.data.data as ApiLesson[];
+        } else if (Array.isArray(lessonsResponse.data)) {
+          // Format: [...] (direct array)
+          lessonsData = lessonsResponse.data as ApiLesson[];
+        } else {
+          // Unknown format, use empty array
+          lessonsData = [] as ApiLesson[];
+        }
+        console.log('Extracted lessons data:', lessonsData);
+
+        if (!lessonsData || lessonsData.length === 0) {
           console.warn('No lessons data returned from Python API');
           throw new Error('No lessons data');
         }
 
         // Process lessons data
-        return processLessonsData(lessons);
+        return processLessonsData(lessonsData);
       } catch (pythonError) {
         console.warn('Failed to fetch from Python backend, trying Node.js backend:', pythonError);
         
@@ -167,7 +241,22 @@ const api = {
           return [];
         }
         
-        return processLessonsData(lessons);
+        // Handle different response formats
+        let lessonsData;
+        if (lessonsResponse.data.data) {
+          lessonsData = lessonsResponse.data.data;
+        } else if (Array.isArray(lessonsResponse.data)) {
+          lessonsData = lessonsResponse.data;
+        } else {
+          lessonsData = [];
+        }
+        
+        if (!lessonsData || lessonsData.length === 0) {
+          console.warn('No lessons data returned from Node.js API');
+          return [];
+        }
+        
+        return processLessonsData(lessonsData);
       }
     } catch (error) {
       console.error('Failed to fetch course structure:', error);
@@ -339,7 +428,7 @@ const api = {
 
   getUsers: async () => {
     try {
-      const response = await nodeAxiosInstance.get('/admin/users');
+      const response = await nodeAxiosInstance.get('/admin/students');
       return response.data;
     } catch (error) {
       console.error('Failed to fetch users:', error);
@@ -402,6 +491,38 @@ const api = {
       throw error;
     }
   },
+
+  // Active users functions
+  getActiveUsers: async () => {
+    try {
+      const response = await nodeAxiosInstance.get('/api/users/online');
+      return response.data;
+    } catch (error) {
+      console.error('Failed to fetch active users:', error);
+      throw error;
+    }
+  },
+
+  updateActiveStatus: async (active: boolean) => {
+    try {
+      const response = await nodeAxiosInstance.post('/api/users/active-status', { active });
+      return response.data;
+    } catch (error) {
+      console.error('Failed to update active status:', error);
+      throw error;
+    }
+  },
+
+  logout: async (userId: string) => {
+    try {
+      await nodeAxiosInstance.post('/api/auth/logout', { userId });
+      disconnectWebSocket();
+      localStorage.removeItem('authToken');
+    } catch (error) {
+      console.error('Logout failed:', error);
+      throw error;
+    }
+  },
 };
 
 // Helper function to process lessons data
@@ -459,7 +580,7 @@ function processLessonsData(lessons: any[]) {
     week.lessons.push({
       id: lessonId,
       name: lesson.lesson_name || `Lesson ${lesson.id || 'Unknown'}`,
-      time: lesson.day_name ? `${lesson.day_name}: lesson` : 'Scheduled lesson'
+      time: `Lesson ${lesson.id}`
     });
   });
 
@@ -480,5 +601,3 @@ function processLessonsData(lessons: any[]) {
 
   return result;
 }
-
-export { api };
