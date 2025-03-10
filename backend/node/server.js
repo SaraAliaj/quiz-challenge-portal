@@ -76,8 +76,8 @@ const pool = mysql.createPool({
   keepAliveInitialDelay: 0
 });
 
-// Create a promise-based wrapper for the pool
-const promisePool = pool.promise();
+// The pool is already promise-based since we're using mysql2/promise
+const promisePool = pool;
 
 console.log('Database configuration:', {
   host: dbHost,
