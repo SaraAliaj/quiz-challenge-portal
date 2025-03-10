@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useWebSocket } from "@/contexts/WebSocketContext";
 import LessonPopup from "@/components/LessonPopup";
-import { LessonChatbot } from "@/components/LessonChatbot";
+import LessonChatbot from "@/components/LessonChatbot";
 import { useToast } from "@/components/ui/use-toast";
 
 interface Module {

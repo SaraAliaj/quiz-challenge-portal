@@ -4,7 +4,8 @@
   "version": "1.0.0",
   "description": "A comprehensive learning platform with quizzes, challenges, and AI-powered chat assistance",
   "scripts": {
-    "dev": "concurrently \"npm run backend:node\" \"npm run backend:python\" \"npm run frontend:dev\"",
+    "dev": "concurrently \"npm run backend:node\" \"npm run frontend:dev\"",
+    "dev:all": "concurrently \"npm run backend:node\" \"npm run backend:python\" \"npm run frontend:dev\"",
     "frontend:dev": "cd frontend && npm run dev",
     "frontend:build": "cd frontend && npm run build",
     "backend:node": "cd backend/node && npm run dev",
@@ -14,7 +15,7 @@
     "create-test-user": "cd backend/node && node create-test-user.js",
     "test:ws": "node test-websocket.js",
     "chatbot": "cd backend/python && python chatbot.py",
-    "start": "concurrently \"npm run backend:node\" \"npm run backend:python\" \"npm run frontend:dev\""
+    "start": "concurrently \"npm run backend:node\" \"npm run frontend:dev\""
   },
   "devDependencies": {
     "concurrently": "^8.2.2",

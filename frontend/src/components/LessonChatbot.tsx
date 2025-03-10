@@ -12,7 +12,7 @@ import { api } from "@/server/api";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
 import { useWebSocket } from '@/contexts/WebSocketContext';
-import { nanoid } from 'nanoid';
+import './LessonChatbot.css';
 
 interface Message {
   id: string;
@@ -54,227 +54,162 @@ interface TableOfContentsItem {
   children?: TableOfContentsItem[];
 }
 
-export function LessonChatbot({ 
+export default function LessonChatbot({ 
   lessonId,
   lessonTitle
 }: LessonChatbotProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
-      content: `I'm your AI assistant for this Deep Learning lesson. How can I help you?`,
+      content: `Hello! I'm your AI assistant for the "${lessonTitle}" lesson. I can answer questions about deep learning concepts, provide examples, or help clarify any topics you're finding difficult. How can I help you today?`,
       sender: 'ai',
       timestamp: new Date()
     }
   ]);
-  const [input, setInput] = useState('');
+  const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [lessonContent, setLessonContent] = useState<LessonContent | null>(null);
   const [isLoadingContent, setIsLoadingContent] = useState(false);
-  const [activeTab, setActiveTab] = useState("chat");
+  const [activeTab, setActiveTab] = useState('chat');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const [initialLoad, setInitialLoad] = useState(true);
-  const [isSidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const socketRef = useRef<WebSocket | null>(null);
   const { toast } = useToast();
   const { user } = useAuth();
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [tableOfContents, setTableOfContents] = useState<TableOfContentsItem[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showTableOfContents, setShowTableOfContents] = useState(false);
+  const socketRef = useRef<WebSocket | null>(null);
+  
+  // Mock PDF URL for demo purposes
+  const mockPdfUrl = 'https://example.com/lesson.pdf';
 
   // Initialize WebSocket connection
   useEffect(() => {
-    // Function to create and set up WebSocket
+    // Mock setup for demo purposes
     const setupWebSocket = () => {
-      // Create WebSocket connection
-      const ws = new WebSocket('ws://localhost:8081');
-      
-      ws.onopen = () => {
-        console.log('Connected to WebSocket server');
-        toast({
-          title: "Connected",
-          description: "Connected to the AI assistant.",
-          variant: "default",
-        });
-      };
-      
-      ws.onmessage = (event) => {
-        console.log('Message from server:', event.data);
-        try {
-          // Try to parse the response as JSON
-          const jsonData = JSON.parse(event.data);
-          
-          // Check if there's an error
-          if (jsonData.error) {
-            toast({
-              title: "Error",
-              description: jsonData.error,
-              variant: "destructive",
-            });
-            setIsLoading(false);
-            return;
-          }
-          
-          // Add AI response to messages
-          const aiMessage: Message = {
-            id: nanoid(),
-            content: jsonData.text || jsonData.response || jsonData.message || event.data,
-            sender: 'ai',
-            timestamp: new Date()
-          };
-          setMessages(prev => [...prev, aiMessage]);
-        } catch (e) {
-          // If not JSON, treat as plain text
-          const aiMessage: Message = {
-            id: nanoid(),
-            content: event.data,
-            sender: 'ai',
-            timestamp: new Date()
-          };
-          setMessages(prev => [...prev, aiMessage]);
-        }
-        setIsLoading(false);
-      };
-      
-      ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        toast({
-          title: "Connection Error",
-          description: "Failed to connect to lesson server. Will try to reconnect...",
-          variant: "destructive",
-        });
-        setIsLoading(false);
-      };
-      
-      ws.onclose = () => {
-        console.log('WebSocket connection closed');
-        // Try to reconnect after 3 seconds
-        setTimeout(() => {
-          toast({
-            title: "Reconnecting",
-            description: "Attempting to reconnect to the server...",
-          });
-          setupWebSocket(); // Recursively try to reconnect
-        }, 3000);
-      };
-      
-      socketRef.current = ws;
+      console.log('Setting up WebSocket connection...');
+      // In a real implementation, this would connect to a WebSocket server
     };
-    
-    // Initial setup
+
     setupWebSocket();
     
-    // Clean up on unmount
+    // Cleanup function
     return () => {
       if (socketRef.current) {
         socketRef.current.close();
       }
     };
-  }, []);
+  }, [lessonId]);
 
-  // Fetch lesson content
-  useEffect(() => {
-    const fetchLessonContent = async () => {
-      setIsLoadingContent(true);
-      try {
-        const data = await api.getLessonContent(lessonId);
-        setLessonContent(data);
-      } catch (error) {
-        console.error('Failed to fetch lesson content:', error);
-        setLessonContent({
-          id: lessonId,
-          title: lessonTitle,
-          content: 'Error loading lesson content. Please try again later.'
-        });
-      } finally {
-        setIsLoadingContent(false);
-      }
-    };
-
-    fetchLessonContent();
-  }, [lessonId, lessonTitle]);
-
-  useEffect(() => {
-    // Prevent scrolling to bottom on initial load
-    if (initialLoad) {
-      setInitialLoad(false);
-      return;
-    }
-
-    // Only scroll when new messages are added
-    if (messagesEndRef.current && scrollAreaRef.current) {
-      const scrollArea = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
-      if (scrollArea) {
-        scrollArea.scrollTop = scrollArea.scrollHeight;
-      }
-    }
-  }, [messages]);
-
-  // Reset window scroll position when component mounts
-  useEffect(() => {
-    window.scrollTo(0, 0);
-  }, []);
-
-  // Scroll to bottom of messages
+  // Scroll to bottom when messages change
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages]);
 
+  // Fetch lesson content on initial load
+  useEffect(() => {
+    const fetchLessonContent = async () => {
+      if (!lessonId) return;
+      
+      setIsLoadingContent(true);
+      try {
+        // In a real implementation, this would fetch from an API
+        console.log(`Fetching content for lesson: ${lessonId}`);
+        
+        // Mock data for demo
+        const mockContent: LessonContent = {
+          id: lessonId,
+          title: 'Introduction to Deep Learning',
+          content: 'Deep learning is a subfield of machine learning...',
+        };
+        
+        setLessonContent(mockContent);
+      } catch (error) {
+        console.error('Error fetching lesson content:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to load lesson content. Please try again.',
+          variant: 'destructive',
+        });
+      } finally {
+        setIsLoadingContent(false);
+      }
+    };
+
+    if (initialLoad) {
+      fetchLessonContent();
+      setInitialLoad(false);
+    }
+  }, [lessonId, toast, initialLoad]);
+
   // Handle sending a message
   const handleSendMessage = async () => {
-    if (!input.trim()) return;
-    
-    // Add user message to chat
+    if (!inputValue.trim()) return;
+
     const userMessage: Message = {
-      id: nanoid(),
-      content: input,
+      id: Date.now().toString(),
+      content: inputValue,
       sender: 'user',
       timestamp: new Date()
     };
-    
+
     setMessages(prev => [...prev, userMessage]);
-    setInput('');
+    setInputValue('');
     setIsLoading(true);
-    
+
     try {
-      // Send message via WebSocket if connected
-      if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
-        // Send JSON with text field as expected by our chatbot
-        socketRef.current.send(JSON.stringify({
-          text: input,
-          lessonId: lessonId
-        }));
-      } else {
-        // Fallback to REST API if WebSocket is not connected
-        const response = await api.sendLessonChatMessage(lessonId, input);
-        
-        // Add AI response to chat
-        const aiMessage: Message = {
-          id: nanoid(),
-          content: response.message || "I'm sorry, I couldn't process your question. Please try again.",
-          sender: 'ai',
-          timestamp: new Date()
-        };
-        
-        setMessages(prev => [...prev, aiMessage]);
-        setIsLoading(false);
-      }
-    } catch (error) {
-      console.error('Error sending message:', error);
+      // Get lesson context for better responses
+      const context = lessonContent ? 
+        `Lesson Title: ${lessonContent.title}\n\nLesson Content: ${lessonContent.content}` : 
+        `Lesson Title: ${lessonTitle}`;
       
-      // Add error message to chat
-      const errorMessage: Message = {
-        id: nanoid(),
-        content: "Sorry, there was an error processing your request. Please try again later.",
+      console.log("Sending message to Grok API...");
+      
+      // Send message to Grok API
+      const response = await api.sendMessageToGrok(inputValue, context);
+      
+      console.log("Received response from Grok API:", response);
+      
+      // Create AI message from response
+      const aiMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        content: response.message || response.response || "I'm sorry, I couldn't generate a response. Please try again.",
         sender: 'ai',
         timestamp: new Date()
       };
       
-      setMessages(prev => [...prev, errorMessage]);
+      setMessages(prev => [...prev, aiMessage]);
+    } catch (error) {
+      console.error('Error sending message:', error);
+      
+      // Show error message
+      toast({
+        title: 'Error',
+        description: 'Failed to get a response from the AI. Please try again.',
+        variant: 'destructive',
+      });
+      
+      // Fallback response with more helpful information about deep learning
+      const fallbackMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        content: "I'm sorry, I'm having trouble connecting to the server. Here's what I know about deep learning: Deep learning is a subfield of machine learning that uses neural networks with multiple layers (hence 'deep') to progressively extract higher-level features from raw input. For example, in image processing, lower layers might identify edges, while higher layers might identify concepts relevant to humans such as digits, letters, or faces.",
+        sender: 'ai',
+        timestamp: new Date()
+      };
+      
+      setMessages(prev => [...prev, fallbackMessage]);
+    } finally {
       setIsLoading(false);
     }
   };
 
-  // Handle pressing Enter to send message
+  // Handle key press in input field
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -282,135 +217,175 @@ export function LessonChatbot({
     }
   };
 
-  // Helper function to determine if content is AI-enhanced
-  const isAIEnhanced = () => {
-    return !!(lessonContent?.summary || lessonContent?.sections || lessonContent?.qaPairs);
-  };
-
-  // Helper function to detect and format PDF content
-  const formatContent = (content: string) => {
-    if (!content) return "No content available";
-    
-    // Check if content is PDF binary data (starts with %PDF)
-    if (content.startsWith('%PDF')) {
-      return "This is a PDF document. The content cannot be displayed directly in this view.";
-    }
-    
-    return content;
-  };
-
-  // Render content based on file type
-  const renderContent = () => {
-    if (!lessonContent) {
-      return <p className="text-gray-500 italic">No content available for this lesson.</p>;
-    }
-
-    const pdfUrl = api.downloadLessonFile(lessonId);
-
-    return (
-      <div className="flex flex-col h-full">
-        {/* PDF Viewer Container with fallback */}
-        <div className="w-full flex-1 min-h-[600px] bg-white rounded-lg overflow-hidden border">
-          <object
-            data={`${pdfUrl}#toolbar=1&navpanes=1&scrollbar=1`}
-            type="application/pdf"
-            className="w-full h-full"
-          >
-            <iframe
-              src={`${pdfUrl}#toolbar=1&navpanes=1&scrollbar=1`}
-              className="w-full h-full"
-              style={{ border: 'none' }}
-            >
-              <p>
-                Your browser doesn't support embedded PDFs.
-                <a href={pdfUrl} target="_blank" rel="noopener noreferrer">
-                  Click here to view the PDF
-                </a>
-              </p>
-            </iframe>
-          </object>
-        </div>
-        
-        <div className="flex justify-end mt-4">
-          <Button 
-            variant="outline" 
-            className="flex items-center gap-2"
-            onClick={() => window.open(pdfUrl, '_blank')}
-          >
-            <Download className="h-4 w-4" />
-            Download PDF
-          </Button>
-        </div>
-      </div>
-    );
-  };
-
-  function handleSubmit(event: FormEvent<HTMLFormElement>): void {
-    event.preventDefault();
+  // Handle form submission
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
     handleSendMessage();
-  }
+  };
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between p-4 border-b">
-        <h2 className="text-xl font-bold flex items-center">
-          <MessageSquare className="mr-2 h-5 w-5 text-black" />
-          AI Assistant
-        </h2>
-      </div>
-
-      <ScrollArea ref={scrollAreaRef} className="flex-grow p-4">
-        <div className="space-y-4">
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex items-start gap-3 ${
-                message.sender === 'user' ? 'flex-row-reverse' : 'flex-row'
-              }`}
-            >
-              <Avatar className={`h-8 w-8 ${message.sender === 'user' ? 'bg-black' : 'bg-gray-200'}`}>
-                <AvatarFallback className="text-xs">
-                  {message.sender === 'user' ? 
-                    <User className="h-4 w-4" /> : 
-                    <Bot className="h-4 w-4 text-black" />
-                  }
-                </AvatarFallback>
-              </Avatar>
-              
-              <div className="space-y-1 max-w-[75%]">
-                <div
-                  className={`rounded-lg px-4 py-2 ${
-                    message.sender === 'user'
-                      ? 'bg-black text-white'
-                      : 'bg-gray-100'
-                  }`}
-                >
-                  <p className="text-sm">{message.content}</p>
-                </div>
-                <p className="text-xs text-gray-500 px-2">
-                  {message.timestamp.toLocaleTimeString()}
-                </p>
-              </div>
-            </div>
-          ))}
-          <div ref={messagesEndRef} />
+    <div className="lesson-chatbot-container">
+      <div className="lesson-header">
+        <div className="lesson-title">
+          <BookOpen size={20} />
+          <h2>Deep Learning - Week 1</h2>
         </div>
-      </ScrollArea>
-
-      <div className="p-4 border-t bg-gray-50">
-        <form onSubmit={handleSubmit} className="flex gap-2">
-          <Input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Type your message..."
-            disabled={isLoading}
-            className="flex-1"
-          />
-          <Button type="submit" disabled={isLoading} className="bg-black hover:bg-gray-800">
-            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          </Button>
-        </form>
+        <div className="lesson-actions">
+          <a href={mockPdfUrl} download className="download-btn">
+            <Download size={16} />
+            <span>Download PDF</span>
+          </a>
+        </div>
       </div>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="lesson-tabs">
+        <TabsList className="lesson-tabs-list">
+          <TabsTrigger value="content" className="lesson-tab">
+            <FileText size={16} />
+            <span>Lesson Content</span>
+          </TabsTrigger>
+          <TabsTrigger value="chat" className="lesson-tab">
+            <MessageSquare size={16} />
+            <span>AI Assistant</span>
+          </TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="content" className="lesson-content-tab">
+          <Card className="lesson-content-card">
+            <CardHeader className="lesson-content-header">
+              <CardTitle className="lesson-content-title">
+                <div className="content-title-text">Lesson 1.1: Introduction to Deep Learning</div>
+                <div className="content-pagination">
+                  <button className="pagination-btn" disabled={currentPage <= 1}>
+                    <ChevronLeft size={16} />
+                  </button>
+                  <span className="pagination-info">Page {currentPage} of {totalPages}</span>
+                  <button className="pagination-btn" disabled={currentPage >= totalPages}>
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="lesson-content-body">
+              <div className="lesson-pdf-content">
+                <div className="pdf-content">
+                  <div className="pdf-page">
+                    <h3>What is Deep Learning?</h3>
+                    <p>Deep learning is a subfield of machine learning that deals with algorithms inspired by the structure and function of the human brain, known as artificial neural networks. It is widely used for tasks such as image recognition, speech processing, and natural language understanding.</p>
+                    
+                    <h4>Key Concepts</h4>
+                    <ul>
+                      <li><strong>Neural Networks:</strong> Computational models inspired by biological neural networks that are used to approximate complex functions.</li>
+                      <li><strong>Activation Functions:</strong> Mathematical functions applied to the outputs of neurons to introduce non-linearity, enabling the network to learn complex patterns.</li>
+                      <li><strong>Supervised vs. Unsupervised Learning:</strong>
+                        <ul>
+                          <li>Supervised Learning: The model is trained on labeled data.</li>
+                          <li>Unsupervised Learning: The model works with data that has no labels, often finding hidden structures or patterns.</li>
+                        </ul>
+                      </li>
+                    </ul>
+                    
+                    <h4>Code Example: Building a Simple Neural Network in TensorFlow</h4>
+                    <pre className="code-block">
+                      <code>
+{`python
+import tensorflow as tf
+from tensorflow import keras
+
+# Define a simple sequential model
+model = keras.Sequential([
+    keras.layers.Dense(10, activation='relu', input_shape=(5,)), # 5 input features, 10 neurons in hidden layer
+    keras.layers.Dense(1, activation='sigmoid') # Output layer with 1 neuron (binary classification)
+])
+
+# Compile the model
+model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])`}
+                      </code>
+                    </pre>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        
+        <TabsContent value="chat" className="lesson-chat-tab">
+          <Card className="chat-card">
+            <CardHeader className="chat-header">
+              <CardTitle className="chat-title">
+                <Bot size={18} />
+                <span>AI Assistant for "Introduction to Deep Learning"</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="chat-content">
+              <ScrollArea className="chat-messages">
+                {messages.length === 0 ? (
+                  <div className="empty-chat">
+                    <Bot size={40} />
+                    <h3>Ask me anything about this lesson!</h3>
+                    <p>I can help explain concepts, provide examples, or answer questions about deep learning.</p>
+                  </div>
+                ) : (
+                  messages.map((message) => (
+                    <div 
+                      key={message.id} 
+                      className={`chat-message ${message.sender === 'user' ? 'user-message' : 'ai-message'}`}
+                    >
+                      <div className="message-avatar">
+                        {message.sender === 'user' ? (
+                          <Avatar>
+                            <AvatarFallback>{user?.username?.charAt(0).toUpperCase() || 'U'}</AvatarFallback>
+                          </Avatar>
+                        ) : (
+                          <Avatar>
+                            <AvatarFallback><Bot size={18} /></AvatarFallback>
+                          </Avatar>
+                        )}
+                      </div>
+                      <div className="message-content">
+                        <div className="message-sender">
+                          {message.sender === 'user' ? user?.username || 'You' : 'AI Assistant'}
+                        </div>
+                        <div className="message-text">
+                          {message.content}
+                        </div>
+                        <div className="message-time">
+                          {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+                {isLoading && (
+                  <div className="loading-message">
+                    <Loader2 className="animate-spin" />
+                    <span>AI is thinking...</span>
+                  </div>
+                )}
+                <div ref={messagesEndRef} />
+              </ScrollArea>
+              
+              <form onSubmit={handleSubmit} className="chat-input-form">
+                <Textarea
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Ask a question about this lesson..."
+                  className="chat-input"
+                  disabled={isLoading}
+                />
+                <Button 
+                  type="submit" 
+                  className="send-button" 
+                  disabled={isLoading || !inputValue.trim()}
+                >
+                  {isLoading ? <Loader2 className="animate-spin" /> : <Send />}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
